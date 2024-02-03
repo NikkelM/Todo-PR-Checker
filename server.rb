@@ -6,6 +6,9 @@ require 'openssl'       # Verifies the webhook signature
 require 'jwt'           # Authenticates a GitHub App
 require 'time'          # Gets ISO 8601 representation of a Time object
 require 'logger'        # Logs debug statements
+require 'git'
+require 'net/http'
+require 'uri'
 
 class GHAapp < Sinatra::Application
 
@@ -45,21 +48,110 @@ class GHAapp < Sinatra::Application
   end
 
   post '/event_handler' do
-
-    # ADD EVENT HANDLING HERE #
+    # Get the event type from the HTTP_X_GITHUB_EVENT header
+    case request.env['HTTP_X_GITHUB_EVENT']
+    when 'check_suite'
+      # A new check_suite has been created. Create a new check run with status queued
+      if @payload['action'] == 'requested' || @payload['action'] == 'rerequested'
+        create_check_run
+      end
+      when 'check_run'
+        # Check that the event is being sent to this app
+        if @payload['check_run']['app']['id'].to_s === APP_IDENTIFIER
+          case @payload['action']
+          when 'created'
+            initiate_check_run
+          when 'rerequested'
+            create_check_run
+          # ADD REQUESTED_ACTION METHOD HERE #
+        end
+      end
+    end
 
     200 # success status
   end
 
   helpers do
+    # Create a new check run with status "queued"
+    def create_check_run
+      @installation_client.create_check_run(
+        # [String, Integer, Hash, Octokit Repository object] A GitHub repository.
+        @payload['repository']['full_name'],
+        # [String] The name of your check run.
+        'Todo Blocker',
+        # [String] The SHA of the commit to check
+        # The payload structure differs depending on whether a check run or a check suite event occurred.
+        @payload['check_run'].nil? ? @payload['check_suite']['head_sha'] : @payload['check_run']['head_sha'],
+        # [Hash] 'Accept' header option, to avoid a warning about the API not being ready for production use.
+        accept: 'application/vnd.github+json'
+      )
+    end
 
-    # ADD CREATE_CHECK_RUN HELPER METHOD HERE #
+    # Start the CI process
+    def initiate_check_run
+      # Once the check run is created, you'll update the status of the check run
+      # to 'in_progress' and run the CI process. When the CI finishes, you'll
+      # update the check run status to 'completed' and add the CI results.
 
-    # ADD INITIATE_CHECK_RUN HELPER METHOD HERE #
+      @installation_client.update_check_run(
+        @payload['repository']['full_name'],
+        @payload['check_run']['id'],
+        status: 'in_progress',
+        accept: 'application/vnd.github+json'
+      )
 
-    # ADD CLONE_REPOSITORY HELPER METHOD HERE #
+      full_repo_name = @payload['repository']['full_name']
+      repository = @payload['repository']['name']
+      pull_requests = @payload['check_run']['pull_requests']
+      pull_number = pull_requests.first['number'] if pull_requests.any?
+  
+      changes = get_pull_request_changes(full_repo_name, repository, pull_number)
+  
+      # Check for TODO style comments in the repository
+      check_for_todos(changes)
 
-    # ADD TAKE_REQUESTED_ACTION HELPER METHOD HERE #
+      # Mark the check run as complete!
+      @installation_client.update_check_run(
+        @payload['repository']['full_name'],
+        @payload['check_run']['id'],
+        status: 'completed',
+        conclusion: 'success',
+        accept: 'application/vnd.github+json'
+      )
+    end
+
+    def get_pull_request_changes(full_repo_name, repository, pull_number)
+      uri = URI("https://api.github.com/repos/#{full_repo_name}/pulls/#{pull_number}")
+      req = Net::HTTP::Get.new(uri)
+      req['Accept'] = 'application/vnd.github.v3.diff'
+      req['Authorization'] = "token #{@installation_token.to_s}"
+    
+      res = Net::HTTP.start(uri.hostname, uri.port, :use_ssl => uri.scheme == 'https') do |http|
+        http.request(req)
+      end
+    
+      diff = res.body
+    
+      current_file = ''
+      line_number = 0
+      changes = []
+    
+      diff.each_line do |line|
+        if line.start_with?('+++')
+          current_file = line[6..-1].strip
+        elsif line.start_with?('+') && !line.start_with?('+++')
+          changes << { file: current_file, line: line_number, text: line[1..-1] }
+        end
+    
+        line_number += 1 if line.start_with?('+', ' ')
+      end
+    
+      changes
+    end
+
+    def check_for_todos(changes)
+      logger.debug changes
+    end
 
     # Saves the raw payload and converts the payload to JSON format
     def get_payload_request(request)
@@ -86,7 +178,7 @@ class GHAapp < Sinatra::Application
           iat: Time.now.to_i,
 
           # JWT expiration time (10 minute maximum)
-          exp: Time.now.to_i + (10 * 60),
+          exp: Time.now.to_i + (5 * 60),
 
           # Your GitHub App's identifier number
           iss: APP_IDENTIFIER
