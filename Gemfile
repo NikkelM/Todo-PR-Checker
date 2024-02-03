@@ -1,9 +1,8 @@
 source 'http://rubygems.org'
 
-gem 'sinatra'
-gem 'jwt'
-gem 'octokit'
+gem 'sinatra', '~> 2.0'
+gem 'jwt', '~> 2.1'
+gem 'octokit', '~> 5.0'
 gem 'puma'
-gem 'rubocop'
 gem 'dotenv'
 gem 'git'
