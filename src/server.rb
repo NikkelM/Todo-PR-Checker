@@ -7,10 +7,6 @@ require 'jwt'           # Authenticates a GitHub App
 require 'time'          # Gets ISO 8601 representation of a Time object
 require 'logger'        # Logs debug statements
 
-# This code is a Sinatra app, for two reasons:
-#   1. Because the app will require a landing page for installation.
-#   2. To easily handle webhook events.
-
 class GHAapp < Sinatra::Application
 
   # Sets the port that's used when starting the web server.
