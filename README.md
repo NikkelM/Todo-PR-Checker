@@ -9,3 +9,9 @@ To start a local server, you can use [https://smee.io/](https://smee.io/) to cre
 ```bash
 smee --url YOUR_DOMAIN --path /event_handler --port 3000
 ```
+
+Then, you can start the server with:
+
+```bash
+bundle exec ruby server.rb
+```
