@@ -139,18 +139,39 @@ class GHAapp < Sinatra::Application
       diff.each_line do |line|
         if line.start_with?('+++')
           current_file = line[6..-1].strip
+        elsif line.start_with?('@@')
+          line_number = line.split(' ')[2].split(',')[0].to_i - 1
         elsif line.start_with?('+') && !line.start_with?('+++')
           changes << { file: current_file, line: line_number, text: line[1..-1] }
         end
     
-        line_number += 1 if line.start_with?('+', ' ')
+        line_number += 1 unless line.start_with?('-') || line.chomp == '\ No newline at end of file'
       end
-    
+
       changes
     end
 
     def check_for_todos(changes)
-      logger.debug changes
+      todo_changes = []
+      in_block_comment = false
+    
+      changes.each do |change|
+        file_type = File.extname(change[:file])
+        text = change[:text].strip
+    
+        if file_type == '.md'
+          in_block_comment = true if text.start_with?('<!--')
+          in_block_comment = false if text.end_with?('-->')
+          todo_changes << change if text.downcase.include?('todo') && (in_block_comment || text.start_with?('<!--'))
+        elsif file_type == '.js'
+          in_block_comment = true if text.start_with?('/*')
+          in_block_comment = false if text.end_with?('*/')
+          todo_changes << change if text.downcase.include?('todo') && (in_block_comment || text.start_with?('//'))
+        end
+      end
+    
+      logger.debug "todo_changes: #{todo_changes}"
+      todo_changes
     end
 
     # Saves the raw payload and converts the payload to JSON format
