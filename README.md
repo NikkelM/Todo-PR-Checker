@@ -1,6 +1,9 @@
 # Todo PR Blocker
 
-This app will check changes in any PR for open `Todo` style comments and fail a status check if any are found.
+Checks the files changed in any open Pull Request for `Todo` style comments and leaves a comment if any are found.
+Only calls to action in comments (line or block comments) will be alerted on.
+
+The app supports the most common programming languages, but feel free to reach out and open an issue if you would like on to be added.
 
 ## Development
 
