@@ -129,7 +129,7 @@ class GHAapp < Sinatra::Application
               comment_body += "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line}-L#{last_line} "
             end
           end
-          comment_body += "\n----\nDid I do good? Let me know by [contributing](https://github.com/sponsors/NikkelM)!"
+          comment_body += "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
         end
 
         app_comment = fetch_bot_comment(full_repo_name, pull_number)
@@ -164,7 +164,7 @@ class GHAapp < Sinatra::Application
           @installation_client.update_comment(
             full_repo_name,
             app_comment.id,
-            "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [contributing](https://github.com/sponsors/NikkelM)!",
+            "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!",
             accept: 'application/vnd.github.v3+json'
           )
         end
