@@ -13,6 +13,9 @@ require 'net/http'
 require 'uri'
 require_relative 'version'
 
+puts "Running container"
+$stdout.puts "Running container (stdout)"
+
 module TodoPRChecker
   class TodoPRCheckerApp < Sinatra::Application
     puts "Running Todo PR Checker version #{TodoPRChecker::VERSION}"
