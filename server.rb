@@ -11,6 +11,7 @@ require 'logger'
 require 'git'
 require 'net/http'
 require 'uri'
+require 'pp'
 
 class GHAapp < Sinatra::Application
   set :port, 3000
@@ -28,7 +29,9 @@ class GHAapp < Sinatra::Application
     get_payload_request(request)
     verify_webhook_signature
 
-    halt 400 unless @payload['repository'].nil? || (@payload['repository']['name'] =~ /[0-9A-Za-z\-_]+/).nil?
+    unless @payload['repository'].nil?
+      halt 400 if (@payload['repository']['name'] =~ /[0-9A-Za-z\-\_]+/).nil?
+    end
 
     authenticate_app
     authenticate_installation(@payload)
@@ -101,15 +104,16 @@ class GHAapp < Sinatra::Application
 
       current_file = ''
       line_number = 0
-      changes = []
+      changes = {}
 
       diff.each_line do |line|
         if line.start_with?('+++')
           current_file = line[6..].strip
+          changes[current_file] = []
         elsif line.start_with?('@@')
           line_number = line.split(' ')[2].split(',')[0].to_i - 1
         elsif line.start_with?('+') && !line.start_with?('+++')
-          changes << { file: current_file, line: line_number, text: line[1..] }
+          changes[current_file] << { line: line_number, text: line[1..] }
         end
 
         line_number += 1 unless line.start_with?('-') || line.chomp == '\ No newline at end of file'
@@ -119,25 +123,49 @@ class GHAapp < Sinatra::Application
     end
 
     def check_for_todos(changes)
-      todo_changes = []
+      keywords = %w[todo fixme bug]
+      todo_changes = {}
       in_block_comment = false
 
-      changes.each do |change|
-        file_type = File.extname(change[:file])
-        text = change[:text].strip
+      comment_chars = {
+        %w[md html] => { line: '<!--', block_start: '<!--', block_end: '-->' },
+        %w[js java ts c cpp cs php swift go kotlin rust dart scala] => { line: '//', block_start: '/*', block_end: '*/' },
+        %w[rb] => { line: '#', block_start: '=begin', block_end: '=end' },
+        %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
+        %w[r shell gitignore gitattributes gitmodules] => { line: '#', block_start: nil, block_end: nil },
+        %w[perl] => { line: '#', block_start: '=pod', block_end: '=cut' },
+        %w[haskell] => { line: '--', block_start: '{-', block_end: '-}' },
+        %w[lua] => { line: '--', block_start: '--[[', block_end: ']]' }
+      }
 
-        if file_type == '.md'
-          in_block_comment = true if text.start_with?('<!--')
-          in_block_comment = false if text.end_with?('-->')
-          todo_changes << change if text.downcase.include?('todo') && (in_block_comment || text.start_with?('<!--'))
-        elsif file_type == '.js'
-          in_block_comment = true if text.start_with?('/*')
-          in_block_comment = false if text.end_with?('*/')
-          todo_changes << change if text.downcase.include?('todo') && (in_block_comment || text.start_with?('//'))
+      changes.each do |file, file_changes|
+        file_type = File.extname(file).delete('.')
+        todo_changes[file] = []
+
+        comment_char = comment_chars.find { |k, _| k.include?(file_type) }
+
+        next unless comment_char
+
+        file_changes.each do |change|
+          text = change[:text].strip
+
+          if comment_char[1][:block_start] && comment_char[1][:block_end]
+            in_block_comment = true if text.start_with?(comment_char[1][:block_start])
+            in_block_comment = false if text.end_with?(comment_char[1][:block_end])
+          end
+
+          keywords.each do |keyword|
+            if text.downcase.include?(keyword) && (in_block_comment || text.start_with?(comment_char[1][:line]))
+              todo_changes[file] << change
+              break
+            end
+          end
         end
+
+        todo_changes.delete(file) if todo_changes[file].empty?
       end
 
-      logger.debug "todo_changes: #{todo_changes}"
+      logger.debug "----    todo_changes #{pp todo_changes}"
       todo_changes
     end
 
