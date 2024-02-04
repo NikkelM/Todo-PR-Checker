@@ -310,5 +310,3 @@ $stdout.puts "Running container (stdout)"
         logger.debug "----    action #{@payload['action']}" unless @payload['action'].nil?
       end
     end
-
-run! if __FILE__ == $0
