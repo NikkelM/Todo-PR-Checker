@@ -5,6 +5,8 @@ Only calls to action in comments (line or block comments) will be alerted on.
 
 The app supports the most common programming languages, but feel free to reach out and open an issue if you would like on to be added.
 
+The app is hosted using Google Cloud Run.
+
 ## Development
 
 To start a local app, you can use [https://smee.io/](https://smee.io/) to create a webhook that will forward to your local app, such as:
