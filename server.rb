@@ -89,17 +89,26 @@ class GHAapp < Sinatra::Application
           accept: 'application/vnd.github+json'
         )
 
-        comment_body = "The following TODOs were found:\n\n"
+        comment_body = "There are unresolved action items in this Pull Request:\n\n"
         todo_changes.each do |file, changes|
-          comment_body += "### `#{file}`\n\n"
-          changes.each do |change|
-            comment_body += "- Line #{change[:line]}: `#{change[:text]}`\n"
+          file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
+          comment_body += "## [`#{file}`](#{file_link}):\n"
+          changes.sort_by! { |change| change[:line] }
+          grouped_changes = changes.slice_when { |prev, curr| curr[:line] - prev[:line] > 3 }.to_a
+          grouped_changes.each do |group|
+            first_line = group.first[:line]
+            last_line = group.last[:line]
+            if first_line == last_line
+              comment_body += "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line} "
+            else
+              comment_body += "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line}-L#{last_line} "
+            end
           end
-          comment_body += "\n"
+          comment_body += "\n\n"
         end
 
         comments = @installation_client.issue_comments(
-          @payload['repository']['full_name'],
+          full_repo_name,
           pull_number,
           accept: 'application/vnd.github.v3+json'
         )
@@ -108,14 +117,14 @@ class GHAapp < Sinatra::Application
 
         if app_comment
           @installation_client.update_comment(
-            @payload['repository']['full_name'],
+            full_repo_name,
             app_comment.id,
             comment_body,
             accept: 'application/vnd.github.v3+json'
           )
         else
           @installation_client.add_comment(
-            @payload['repository']['full_name'],
+            repo_full_name,
             pull_number,
             comment_body,
             accept: 'application/vnd.github.v3+json'
