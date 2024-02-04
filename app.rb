@@ -11,16 +11,7 @@ require 'logger'
 require 'git'
 require 'net/http'
 require 'uri'
-require 'functions_framework'
 require_relative 'version'
-
-FunctionsFramework.http 'sinatra_app' do |request|
-  # Create a Rack::Request object
-  rack_request = Rack::Request.new(request.env)
-
-  # Call the Sinatra application
-  TodoPRChecker::TodoPRCheckerApp.call(rack_request.env)
-end
 
 module TodoPRChecker
   class TodoPRCheckerApp < Sinatra::Application
