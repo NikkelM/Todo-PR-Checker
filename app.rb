@@ -41,6 +41,11 @@ module TodoPRChecker
       authenticate_installation(@payload)
     end
 
+    get "/" do
+      name = ENV["NAME"] || "World"
+      "Hello #{name}!"
+    end
+
     post '/event_handler' do
       event_type = request.env['HTTP_X_GITHUB_EVENT']
 
