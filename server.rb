@@ -64,6 +64,16 @@ class GHAapp < Sinatra::Application
       )
     end
 
+    def fetch_bot_comment(full_repo_name, pull_number)
+      comments = @installation_client.issue_comments(
+        full_repo_name,
+        pull_number,
+        accept: 'application/vnd.github.v3+json'
+      )
+
+      comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
+    end
+
     def initiate_check_run
       @installation_client.update_check_run(
         @payload['repository']['full_name'],
@@ -81,14 +91,6 @@ class GHAapp < Sinatra::Application
       todo_changes = check_for_todos(changes)
 
       if todo_changes.any?
-        @installation_client.update_check_run(
-          @payload['repository']['full_name'],
-          @payload['check_run']['id'],
-          status: 'completed',
-          conclusion: 'failure',
-          accept: 'application/vnd.github+json'
-        )
-
         comment_body = "There are unresolved action items in this Pull Request:\n\n"
         todo_changes.each do |file, changes|
           file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
@@ -107,13 +109,7 @@ class GHAapp < Sinatra::Application
           comment_body += "\n\n"
         end
 
-        comments = @installation_client.issue_comments(
-          full_repo_name,
-          pull_number,
-          accept: 'application/vnd.github.v3+json'
-        )
-
-        app_comment = comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
+        app_comment = fetch_bot_comment(full_repo_name, pull_number)
 
         if app_comment
           @installation_client.update_comment(
@@ -130,7 +126,26 @@ class GHAapp < Sinatra::Application
             accept: 'application/vnd.github.v3+json'
           )
         end
+
+        @installation_client.update_check_run(
+          @payload['repository']['full_name'],
+          @payload['check_run']['id'],
+          status: 'completed',
+          conclusion: 'failure',
+          accept: 'application/vnd.github+json'
+        )
       else
+        app_comment = fetch_bot_comment(full_repo_name, pull_number)
+
+        if app_comment
+          @installation_client.update_comment(
+            full_repo_name,
+            app_comment.id,
+            'All action items have been resolved!',
+            accept: 'application/vnd.github.v3+json'
+          )
+        end
+
         @installation_client.update_check_run(
           @payload['repository']['full_name'],
           @payload['check_run']['id'],
