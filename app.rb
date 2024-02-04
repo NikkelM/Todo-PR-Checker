@@ -27,6 +27,7 @@ configure :development do
 end
 
 before '/event_handler' do
+  puts "---- received event in before handler #{request.env['HTTP_X_GITHUB_EVENT']}"
   get_payload_request(request)
   verify_webhook_signature
 
@@ -36,12 +37,6 @@ before '/event_handler' do
 
   authenticate_app
   authenticate_installation(@payload)
-end
-
-get "/event_handler" do
-  name = ENV["NAME"] || "World"
-  puts "Hello #{name}!"
-  "Hello #{name}!"
 end
 
 post '/event_handler' do
@@ -302,7 +297,7 @@ helpers do
     our_digest = OpenSSL::HMAC.hexdigest(method, WEBHOOK_SECRET, @payload_raw)
     halt 401 unless their_digest == our_digest
 
-    logger.debug "---- received event #{request.env['HTTP_X_GITHUB_EVENT']}"
-    logger.debug "----    action #{@payload['action']}" unless @payload['action'].nil?
+    puts "---- received event #{request.env['HTTP_X_GITHUB_EVENT']}"
+    puts "----    action #{@payload['action']}" unless @payload['action'].nil?
   end
 end
