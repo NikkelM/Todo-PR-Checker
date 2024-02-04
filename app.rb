@@ -13,7 +13,7 @@ require 'net/http'
 require 'uri'
 require_relative 'version'
 
-puts "Running Todo PR Checker version: #{VERSION}"
+logger.debug "Running Todo PR Checker version: #{VERSION}"
 
 set :bind, '0.0.0.0'
 set :port, ENV['PORT'] || '3000'
@@ -27,7 +27,6 @@ configure :development do
 end
 
 before '/' do
-  puts "---- received event in before handler #{request.env['HTTP_X_GITHUB_EVENT']}"
   get_payload_request(request)
   verify_webhook_signature
 
@@ -297,7 +296,7 @@ helpers do
     our_digest = OpenSSL::HMAC.hexdigest(method, WEBHOOK_SECRET, @payload_raw)
     halt 401 unless their_digest == our_digest
 
-    puts "---- received event #{request.env['HTTP_X_GITHUB_EVENT']}"
-    puts "----    action #{@payload['action']}" unless @payload['action'].nil?
+    logger.debug "---- received event #{request.env['HTTP_X_GITHUB_EVENT']}"
+    logger.debug "----    action #{@payload['action']}" unless @payload['action'].nil?
   end
 end
