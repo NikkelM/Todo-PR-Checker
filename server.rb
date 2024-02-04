@@ -11,7 +11,6 @@ require 'logger'
 require 'git'
 require 'net/http'
 require 'uri'
-require 'pp'
 
 class GHAapp < Sinatra::Application
   set :port, 3000
@@ -79,15 +78,58 @@ class GHAapp < Sinatra::Application
 
       changes = get_pull_request_changes(full_repo_name, pull_number)
 
-      check_for_todos(changes)
+      todo_changes = check_for_todos(changes)
 
-      @installation_client.update_check_run(
-        @payload['repository']['full_name'],
-        @payload['check_run']['id'],
-        status: 'completed',
-        conclusion: 'success',
-        accept: 'application/vnd.github+json'
-      )
+      if todo_changes.any?
+        @installation_client.update_check_run(
+          @payload['repository']['full_name'],
+          @payload['check_run']['id'],
+          status: 'completed',
+          conclusion: 'failure',
+          accept: 'application/vnd.github+json'
+        )
+
+        comment_body = "The following TODOs were found:\n\n"
+        todo_changes.each do |file, changes|
+          comment_body += "### `#{file}`\n\n"
+          changes.each do |change|
+            comment_body += "- Line #{change[:line]}: `#{change[:text]}`\n"
+          end
+          comment_body += "\n"
+        end
+
+        comments = @installation_client.issue_comments(
+          @payload['repository']['full_name'],
+          pull_number,
+          accept: 'application/vnd.github.v3+json'
+        )
+
+        app_comment = comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
+
+        if app_comment
+          @installation_client.update_comment(
+            @payload['repository']['full_name'],
+            app_comment.id,
+            comment_body,
+            accept: 'application/vnd.github.v3+json'
+          )
+        else
+          @installation_client.add_comment(
+            @payload['repository']['full_name'],
+            pull_number,
+            comment_body,
+            accept: 'application/vnd.github.v3+json'
+          )
+        end
+      else
+        @installation_client.update_check_run(
+          @payload['repository']['full_name'],
+          @payload['check_run']['id'],
+          status: 'completed',
+          conclusion: 'success',
+          accept: 'application/vnd.github+json'
+        )
+      end
     end
 
     def get_pull_request_changes(full_repo_name, pull_number)
@@ -140,12 +182,11 @@ class GHAapp < Sinatra::Application
 
       changes.each do |file, file_changes|
         file_type = File.extname(file).delete('.')
-        todo_changes[file] = []
-
         comment_char = comment_chars.find { |k, _| k.include?(file_type) }
 
         next unless comment_char
 
+        file_todos = []
         file_changes.each do |change|
           text = change[:text].strip
 
@@ -156,16 +197,15 @@ class GHAapp < Sinatra::Application
 
           keywords.each do |keyword|
             if text.downcase.include?(keyword) && (in_block_comment || text.start_with?(comment_char[1][:line]))
-              todo_changes[file] << change
+              file_todos << change
               break
             end
           end
         end
 
-        todo_changes.delete(file) if todo_changes[file].empty?
+        todo_changes[file] = file_todos unless file_todos.empty?
       end
 
-      logger.debug "----    todo_changes #{pp todo_changes}"
       todo_changes
     end
 
