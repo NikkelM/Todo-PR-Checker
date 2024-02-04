@@ -311,4 +311,4 @@ $stdout.puts "Running container (stdout)"
       end
     end
 
-run! if app_file == $0
+run! if __FILE__ == $0
