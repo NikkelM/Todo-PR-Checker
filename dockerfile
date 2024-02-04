@@ -8,4 +8,4 @@ RUN bundle install
 
 COPY . ./
 
-CMD ["ruby", "app.rb"]
+CMD ["ruby", "./app.rb"]

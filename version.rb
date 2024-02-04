@@ -1,3 +1,1 @@
-module TodoPRChecker
-  VERSION = '1.0.0'.freeze
-end
+VERSION = '1.0.0'.freeze

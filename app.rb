@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'sinatra/base'
+require 'sinatra'
 require 'octokit'
 require 'dotenv/load'
 require 'json'
@@ -16,9 +16,7 @@ require_relative 'version'
 puts "Running container"
 $stdout.puts "Running container (stdout)"
 
-module TodoPRChecker
-  class TodoPRCheckerApp < Sinatra::Application
-    puts "Running Todo PR Checker version #{TodoPRChecker::VERSION}"
+    puts "Running Todo PR Checker version #{VERSION}"
 
     set :bind, '0.0.0.0'
     port = ENV['PORT'] || '3000'
@@ -311,7 +309,3 @@ module TodoPRChecker
         logger.debug "----    action #{@payload['action']}" unless @payload['action'].nil?
       end
     end
-
-    run! if __FILE__ == $PROGRAM_NAME
-  end
-end
