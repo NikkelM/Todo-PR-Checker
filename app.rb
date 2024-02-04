@@ -16,8 +16,7 @@ require_relative 'version'
 puts "Running Todo PR Checker version #{VERSION}"
 
 set :bind, '0.0.0.0'
-port = ENV['PORT'] || '3000'
-set :port, port
+set :port, ENV['PORT'] || '3000'
 
 PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV['GITHUB_PRIVATE_KEY'].gsub('\n', "\n"))
 WEBHOOK_SECRET = ENV['GITHUB_WEBHOOK_SECRET']
