@@ -39,15 +39,25 @@ class GHAapp < Sinatra::Application
   post '/event_handler' do
     event_type = request.env['HTTP_X_GITHUB_EVENT']
 
-    if event_type == 'check_suite' && (@payload['action'] == 'requested' || @payload['action'] == 'rerequested')
+    if event_type == 'pull_request' && @payload['action'] == 'opened'
       create_check_run
     end
 
-    if event_type == 'check_run' && @payload['check_run']['app']['id'].to_s == APP_IDENTIFIER
-      if @payload['action'] == 'created'
-        initiate_check_run
-      elsif @payload['action'] == 'rerequested'
+    if event_type == 'check_suite' && (@payload['action'] == 'requested' || @payload['action'] == 'rerequested')
+      pull_request = @payload['check_suite']['pull_requests'].first
+      if pull_request
         create_check_run
+      end
+    end
+
+    if event_type == 'check_run' && @payload['check_run']['app']['id'].to_s == APP_IDENTIFIER
+      pull_request = @payload['check_run']['pull_requests'].first
+      if pull_request
+        if @payload['action'] == 'created'
+          initiate_check_run
+        elsif @payload['action'] == 'rerequested'
+          create_check_run
+        end
       end
     end
 
@@ -56,10 +66,18 @@ class GHAapp < Sinatra::Application
 
   helpers do
     def create_check_run
+      sha = if @payload['pull_request']
+              @payload['pull_request']['head']['sha']
+            elsif @payload['check_run']
+              @payload['check_run']['head_sha']
+            else
+              @payload['check_suite']['head_sha']
+            end
+
       @installation_client.create_check_run(
         @payload['repository']['full_name'],
-        'Todo Blocker',
-        @payload['check_run'].nil? ? @payload['check_suite']['head_sha'] : @payload['check_run']['head_sha'],
+        'Todo PR Checker',
+        sha,
         accept: 'application/vnd.github+json'
       )
     end
@@ -120,7 +138,7 @@ class GHAapp < Sinatra::Application
           )
         else
           @installation_client.add_comment(
-            repo_full_name,
+            full_repo_name,
             pull_number,
             comment_body,
             accept: 'application/vnd.github.v3+json'
@@ -194,7 +212,7 @@ class GHAapp < Sinatra::Application
       in_block_comment = false
 
       comment_chars = {
-        %w[md html] => { line: '<!--', block_start: '<!--', block_end: '-->' },
+        %w[md html astro] => { line: '<!--', block_start: '<!--', block_end: '-->' },
         %w[js java ts c cpp cs php swift go kotlin rust dart scala] => { line: '//', block_start: '/*', block_end: '*/' },
         %w[rb] => { line: '#', block_start: '=begin', block_end: '=end' },
         %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
@@ -220,7 +238,13 @@ class GHAapp < Sinatra::Application
           end
 
           keywords.each do |keyword|
-            if text.downcase.include?(keyword) && (in_block_comment || text.start_with?(comment_char[1][:line]))
+            if comment_char[1][:block_start] && comment_char[1][:block_end]
+              regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}#{keyword}|#{Regexp.escape(comment_char[1][:block_start])}#{keyword}#{Regexp.escape(comment_char[1][:block_end])})/
+            else
+              regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}#{keyword})/
+            end
+
+            if text.downcase.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
               file_todos << change
               break
             end
