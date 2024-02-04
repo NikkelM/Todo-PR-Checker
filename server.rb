@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require 'sinatra/base'  # Use the Sinatra web framework
-require 'octokit'       # Use the Octokit Ruby library to interact with GitHub's REST API
-require 'dotenv/load'   # Manages environment variables
-require 'json'          # Allows your app to manipulate JSON data
-require 'openssl'       # Verifies the webhook signature
-require 'jwt'           # Authenticates a GitHub App
-require 'time'          # Gets ISO 8601 representation of a Time object
-require 'logger'        # Logs debug statements
+require 'sinatra/base'
+require 'octokit'
+require 'dotenv/load'
+require 'json'
+require 'openssl'
+require 'jwt'
+require 'time'
+require 'logger'
 require 'git'
 require 'net/http'
 require 'uri'
