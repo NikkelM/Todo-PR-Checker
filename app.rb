@@ -26,7 +26,7 @@ configure :development do
   set :logging, Logger::DEBUG
 end
 
-before '/event_handler' do
+before '/' do
   puts "---- received event in before handler #{request.env['HTTP_X_GITHUB_EVENT']}"
   get_payload_request(request)
   verify_webhook_signature
@@ -39,7 +39,7 @@ before '/event_handler' do
   authenticate_installation(@payload)
 end
 
-post '/event_handler' do
+post '/' do
   event_type = request.env['HTTP_X_GITHUB_EVENT']
 
   if event_type == 'pull_request' && @payload['action'] == 'opened'
