@@ -24,7 +24,7 @@ configure :development do
   set :logging, Logger::DEBUG
 end
 
-logger.debug "Running Todo PR Checker version: #{VERSION}"
+puts "Running Todo PR Checker version: #{VERSION}"
 
 before '/' do
   get_payload_request(request)
