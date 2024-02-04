@@ -13,8 +13,6 @@ require 'net/http'
 require 'uri'
 require_relative 'version'
 
-logger.debug "Running Todo PR Checker version: #{VERSION}"
-
 set :bind, '0.0.0.0'
 set :port, ENV['PORT'] || '3000'
 
@@ -25,6 +23,8 @@ APP_IDENTIFIER = ENV['GITHUB_APP_IDENTIFIER']
 configure :development do
   set :logging, Logger::DEBUG
 end
+
+logger.debug "Running Todo PR Checker version: #{VERSION}"
 
 before '/' do
   get_payload_request(request)
