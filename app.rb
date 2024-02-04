@@ -42,8 +42,9 @@ $stdout.puts "Running container (stdout)"
       authenticate_installation(@payload)
     end
 
-    get "/" do
+    get "/event_handler" do
       name = ENV["NAME"] || "World"
+      puts "Hello #{name}!"
       "Hello #{name}!"
     end
 
@@ -309,3 +310,5 @@ $stdout.puts "Running container (stdout)"
         logger.debug "----    action #{@payload['action']}" unless @payload['action'].nil?
       end
     end
+
+run! if app_file == $0
