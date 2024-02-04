@@ -13,7 +13,7 @@ require 'net/http'
 require 'uri'
 require_relative 'version'
 
-puts "Running Todo PR Checker version #{VERSION}"
+puts "Running Todo PR Checker version: #{VERSION}"
 
 set :bind, '0.0.0.0'
 set :port, ENV['PORT'] || '3000'
