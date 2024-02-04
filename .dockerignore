@@ -1,0 +1,7 @@
+dockerfile
+CHANGELOG.md
+README.md
+.github/
+development/
+.gitattributes
+.gitignore
