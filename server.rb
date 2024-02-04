@@ -109,7 +109,12 @@ class GHAapp < Sinatra::Application
       todo_changes = check_for_todos(changes)
 
       if todo_changes.any?
-        comment_body = "There are unresolved action items in this Pull Request:\n\n"
+        number_of_todos = todo_changes.values.flatten.count
+        comment_body = if number_of_todos == 1
+                         "There is 1 unresolved action item in this Pull Request:\n\n"
+                       else
+                         "There are #{number_of_todos} unresolved action items in this Pull Request:\n\n"
+                       end
         todo_changes.each do |file, changes|
           file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
           comment_body += "## [`#{file}`](#{file_link}):\n"
@@ -124,7 +129,7 @@ class GHAapp < Sinatra::Application
               comment_body += "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line}-L#{last_line} "
             end
           end
-          comment_body += "\n\n"
+          comment_body += "\n----\nDid I do good? Let me know by [contributing](https://github.com/sponsors/NikkelM)!"
         end
 
         app_comment = fetch_bot_comment(full_repo_name, pull_number)
@@ -159,7 +164,7 @@ class GHAapp < Sinatra::Application
           @installation_client.update_comment(
             full_repo_name,
             app_comment.id,
-            'All action items have been resolved!',
+            "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [contributing](https://github.com/sponsors/NikkelM)!",
             accept: 'application/vnd.github.v3+json'
           )
         end
