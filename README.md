@@ -1,6 +1,8 @@
-<div style="text-align: center;">
-  <h1 style="display: inline-block; vertical-align: middle;"><img src="./development/images/icon/images/icon.png" style="vertical-align: middle;" width="35"> Todo PR Checker</h1>
-</div>
+<h1 align="center">Todo PR Checker</h1>
+
+<p align="center">
+  <img src="./development/images/icon/images/icon.png" width="150" alt="Todo PR Checker">
+</p>
 
 Do you keep forgetting to resolve that one `// TODO:...` or fix the last ` # Bug...` before merging your Pull Requests?
 
