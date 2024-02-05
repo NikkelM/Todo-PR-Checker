@@ -1,3 +1,5 @@
+# TODO: Many different file types are supported, but if you are missing one, feel free to open an issue!
+
 name: Create Github Release
 
 on:
