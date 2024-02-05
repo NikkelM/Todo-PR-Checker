@@ -40,14 +40,17 @@ end
 
 post '/' do
   event_type = request.env['HTTP_X_GITHUB_EVENT']
+  event_handled = false
 
   if event_type == 'pull_request' && @payload['action'] == 'opened'
+    event_handled = true
     create_check_run
   end
 
   if event_type == 'check_suite' && (@payload['action'] == 'requested' || @payload['action'] == 'rerequested')
     pull_request = @payload['check_suite']['pull_requests'].first
     if pull_request
+      event_handled = true
       create_check_run
     end
   end
@@ -56,14 +59,16 @@ post '/' do
     pull_request = @payload['check_run']['pull_requests'].first
     if pull_request
       if @payload['action'] == 'created'
+        event_handled = true
         initiate_check_run
       elsif @payload['action'] == 'rerequested'
+        event_handled = true
         create_check_run
       end
     end
   end
 
-  200
+  event_handled ? 200 : 204
 end
 
 helpers do
