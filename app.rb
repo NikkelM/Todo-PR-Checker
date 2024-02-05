@@ -255,9 +255,9 @@ helpers do
 
         keywords.each do |keyword|
           if comment_char[1][:block_start] && comment_char[1][:block_end]
-            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}#{keyword}|#{Regexp.escape(comment_char[1][:block_start])}#{keyword}#{Regexp.escape(comment_char[1][:block_end])})/
+            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{keyword}\b#{Regexp.escape(comment_char[1][:block_end])})/
           else
-            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}#{keyword})/
+            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b)/
           end
 
           if text.downcase.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
