@@ -21,17 +21,23 @@ jobs:
       
       - name: Get previous version
         id: get_previous_version
+        uses: pozetroninc/github-action-get-latest-release@master
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract version number
+        id: extract_version
         run: |
-          version=$(curl --silent "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | grep '"tag_name":' | sed -E 's/.*v([^"]+).*/\1/')
+          version=${{ steps.get_previous_version.outputs.release }}
+          version=${version#v}
           echo "version=$version" >> $GITHUB_OUTPUT
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Check if version changed
         id: check_version
         run: |
-          if [ -n "${{ steps.get_previous_version.outputs.version }}" ] && [ "${{ steps.get_version.outputs.version }}" != "${{ steps.get_previous_version.outputs.version }}" ]; then
+          if [ -n "${{ steps.extract_version.outputs.version }}" ] && [ "${{ steps.get_version.outputs.version }}" != "${{ steps.extract_version.outputs.version }}" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
           else
             echo "changed=false" >> $GITHUB_OUTPUT
