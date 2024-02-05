@@ -12,25 +12,22 @@ jobs:
       - name: Set up Git repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 2
 
       - name: Get current version
         id: get_version
         run: |
           echo "::set-output name=version::$(grep -oP 'VERSION = \'\K(.*)(?=\'.freeze)' version.rb)"
       
-      - name: Get latest release version
-        id: get_latest_release
-        uses: pozetroninc/github-action-get-latest-release@master
-        with:
-          owner: ${{ github.repository_owner }}
-          repo: ${{ github.repository }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get previous version
+        id: get_previous_version
+        run: |
+          echo "::set-output name=version::$(git diff HEAD^ version.rb | grep -oP 'VERSION = \'\K(.*)(?=\'.freeze)')"
       
       - name: Check if version changed
         id: check_version
         run: |
-          if [ v"${{ steps.get_version.outputs.version }}" != "${{ steps.get_latest_release.outputs.release }}" ]; then
+          if [ "${{ steps.get_version.outputs.version }}" != "${{ steps.get_previous_version.outputs.version }}" ]; then
             echo "::set-output name=changed::true"
           else
             echo "::set-output name=changed::false"
