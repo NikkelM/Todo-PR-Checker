@@ -113,9 +113,9 @@ helpers do
     if todo_changes.any?
       number_of_todos = todo_changes.values.flatten.count
       comment_body = if number_of_todos == 1
-                       "There is 1 unresolved action item in this Pull Request:\n\n"
+                       "There is **1** unresolved action item in this Pull Request:\n\n"
                      else
-                       "There are #{number_of_todos} unresolved action items in this Pull Request:\n\n"
+                       "There are **#{number_of_todos}** unresolved action items in this Pull Request:\n\n"
                      end
       todo_changes.each do |file, changes|
         file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
