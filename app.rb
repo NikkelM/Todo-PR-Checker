@@ -111,17 +111,12 @@ helpers do
     todo_changes = check_for_todos(changes)
 
     if todo_changes.any?
-      type_counts = todo_changes.values.flatten.group_by { |change| change[:type] }.transform_values(&:count)
       number_of_todos = todo_changes.values.flatten.count
       comment_body = if number_of_todos == 1
-                       "There is 1 unresolved action item in this Pull Request:\n\n"
+                       "There is **1** unresolved action item in this Pull Request:\n\n"
                      else
-                       "There are #{number_of_todos} unresolved action items in this Pull Request:\n\n"
+                       "There are **#{number_of_todos}** unresolved action items in this Pull Request:\n\n"
                      end
-      comment_body += "\n| Action Item | Count |\n| --- | --- |\n"
-      type_counts.each do |type, count|
-        comment_body += "| #{type.capitalize} | #{count} |\n"
-      end
       todo_changes.each do |file, changes|
         file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
         num_items = if changes.count == 1
@@ -255,9 +250,9 @@ helpers do
 
         keywords.each do |keyword|
           if comment_char[1][:block_start] && comment_char[1][:block_end]
-            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}#{keyword}|#{Regexp.escape(comment_char[1][:block_start])}#{keyword}#{Regexp.escape(comment_char[1][:block_end])})/
+            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{keyword}\b#{Regexp.escape(comment_char[1][:block_end])})/
           else
-            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}#{keyword})/
+            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b)/
           end
 
           if text.downcase.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
