@@ -22,10 +22,11 @@ jobs:
       - name: Get previous version
         id: get_previous_version
         run: |
-          version=$(git diff HEAD^ version.rb | grep -oP "\K\d+\.\d+\.\d+")
+          version=$(curl --silent "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | grep '"tag_name":' | sed -E 's/.*v([^"]+).*/\1/')
           echo "version=$version" >> $GITHUB_OUTPUT
-          echo version
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Check if version changed
         id: check_version
