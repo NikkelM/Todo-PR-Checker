@@ -1,24 +1,88 @@
-# Todo PR Blocker
+<div style="text-align: center;">
+  <h1 style="display: inline-block; vertical-align: middle;"><img src="./development/images/icon/images/icon.png" style="vertical-align: middle;" width="35"> Todo PR Checker</h1>
+</div>
 
-The app checks Pull Request changes for `Todo` style action items and reports them in a comment.
-Only calls to action in comments (line or block comments) will cause the check to fail.
+Do you keep forgetting to resolve that one `// TODO:...` or fix the last ` # Bug...` before merging your Pull Requests?
 
-The app already supports a wide range of programming languages, but feel free to reach out and open an issue if you would like one to be added.
+The Todo PR Checker will make sure that doesn't happen anymore.
+The app will check all code changes in your open Pull Requests for remaining `Todo`, `Fixme` etc. action items in code comments and leave a comment on the PR with a list and links to any items that were found.
 
-The app is hosted using Google Cloud Run.
+This list will update whenever new changes are pushed, so you always know exactly how much work is left.
+
+The app supports a wide array of programming languages and action items.
+Should you find that your language of choice or action item is not supported, feel free to open an issue.
+
+The app is built automaticall using Google Cloud Build and hosted through Google Cloud Run.
+
+## In-Depth
+
+On each push to a Pull Request, the app will check all code changes for action item keywords in code comments.
+Currently supported action items are `Todo`, `Fixme` and `Bug`. 
+Capitalization and location of the action item do not matter, as long as it is its own word.
+
+The app supports a wide range of programming languages.
+Currently supported languages/file extensions are: _Astro, Bash, C, C#, C++, CSS, Dart, .gitattributes, .gitignore, .gitmodules, Go, Groovy, Haskell, HTML, Java, JavaScript, Kotlin, Less, Lua, Markdown, MATLAB, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Sass, Scala, SCSS, Shell, SQL, Swift, TeX, TypeScript, XML, YAML_
+
+The app will leave a comment on your Pull Request if it finds any unresolved action items.
+Embedded links in the comment lead directly to the lines of code that contain the found action items.
+Whenever new changes are pushed to the Pull Request, the app will update the comment with the latest findings and inform you about your progress.
+
+You can configure the check to block Pull Requests until all action items are resolved by creating a branch protection rule in your repository settings.
+
+Tech stack: The app is built using Ruby and automatically deployed to Google Cloud Run using Google Cloud Build when a new release is created.
 
 ## Development
 
-To start a local app, you can use [https://smee.io/](https://smee.io/) to create a webhook that will forward to your local app, such as:
+Before you are able to locally develop and run the app, you need to create and set up a GitHub App as described in the [GitHub documentation](https://docs.github.com/en/apps/creating-github-apps), so you are able to receive webhooks from GitHub in your local instance of the app.
+
+Install the required gems with:
 
 ```bash
-smee --url https://smee.io/b2p7TRjSjwxQDJ --path / --port 3000
+bundle install
 ```
 
-Make sure to also set the Webhook URL in the app settings to the same URL.
+Then create a `.env` file with the following content:
+
+```text
+GITHUB_APP_ID=${your_app_id}
+GITHUB_PRIVATE_KEY=${app_private_key}
+GITHUB_WEBHOOK_SECRET=${app_webhook_secret}
+```
+
+The documentation linked above describes where to obtain these values.
+
+You can then use [smee](https://smee.io/) to create a webhook that will forward the webhook events to your local app:
+
+```bash
+smee --url smee_url --path / --port 3000
+```
+
+Make sure to also set the Webhook URL in the app settingson GitHub to the same `smee_url`.
 
 Then, you can start the app with:
 
 ```bash
 ruby ./app.rb
 ```
+
+If you have installed the app in a repository, and set up the webhooks correctly, you should now see the app receiving events when you create or update a Pull Request as such:
+
+```text
+D, [2024-02-05T14:04:28.359807 #26008] DEBUG -- : ---- received event check_suite
+D, [2024-02-05T14:04:28.360041 #26008] DEBUG -- : ----    action requested
+D, [2024-02-05T14:04:28.786714 #26008] DEBUG -- : ---- received event pull_request
+D, [2024-02-05T14:04:28.786849 #26008] DEBUG -- : ----    action synchronize
+xxx.xx.xxx.xxx:35146 - - [05/Feb/2024:14:04:29 +0000] "POST / HTTP/1.1" 200 - 0.2616
+xxx.xx.xxx.xxx:47458 - - [05/Feb/2024:14:04:29 +0000] "POST / HTTP/1.1" 200 - 0.8099
+D, [2024-02-05T14:04:29.872895 #26008] DEBUG -- : ---- received event check_run
+D, [2024-02-05T14:04:29.873041 #26008] DEBUG -- : ----    action created
+xxx.xx.xxx.xxx:36950 - - [05/Feb/2024:14:04:32 +0000] "POST / HTTP/1.1" 200 - 2.7705
+D, [2024-02-05T14:04:33.227254 #26008] DEBUG -- : ---- received event check_suite
+D, [2024-02-05T14:04:33.227460 #26008] DEBUG -- : ----    action completed
+D, [2024-02-05T14:04:33.351184 #26008] DEBUG -- : ---- received event check_run
+D, [2024-02-05T14:04:33.351388 #26008] DEBUG -- : ----    action completed
+```
+
+---
+
+If you enjoy this app and want to say thanks, consider buying me a [coffee](https://ko-fi.com/nikkelm) or [sponsoring](https://github.com/sponsors/NikkelM) this project.
