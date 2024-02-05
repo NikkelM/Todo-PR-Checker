@@ -156,7 +156,7 @@ helpers do
           accept: 'application/vnd.github.v3+json'
         )
       end
-
+      # TODO: Update the check summary after a run concludes
       @installation_client.update_check_run(
         @payload['repository']['full_name'],
         @payload['check_run']['id'],
@@ -166,7 +166,11 @@ helpers do
       )
     else
       app_comment = fetch_bot_comment(full_repo_name, pull_number)
-
+=begin This is a block comment, any actions items it includes such as BUG
+TODO or FIXME will cause the app to create a comment
+- no matter what line of the comment they are on!
+=end
+# If action items are grouped closely together in code, the app will render them in the same code block
       if app_comment
         @installation_client.update_comment(
           full_repo_name,
