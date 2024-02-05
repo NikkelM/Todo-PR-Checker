@@ -229,14 +229,13 @@ helpers do
     in_block_comment = false
 
     comment_chars = {
-      %w[md html astro] => { line: '<!--', block_start: '<!--', block_end: '-->' },
-      %w[js java ts c cpp cs php swift go kotlin rust dart scala] => { line: '//', block_start: '/*', block_end: '*/' },
-      %w[rb] => { line: '#', block_start: '=begin', block_end: '=end' },
+      %w[md html astro xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
+      %w[js java ts c cpp cs php swift go kotlin rust dart scala css less sass scss groovy sql] => { line: '//', block_start: '/*', block_end: '*/' },
+      %w[rb perl] => { line: '#', block_start: '=begin', block_end: '=end' },
       %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
-      %w[r shell gitignore gitattributes gitmodules] => { line: '#', block_start: nil, block_end: nil },
-      %w[perl] => { line: '#', block_start: '=pod', block_end: '=cut' },
-      %w[haskell] => { line: '--', block_start: '{-', block_end: '-}' },
-      %w[lua] => { line: '--', block_start: '--[[', block_end: ']]' }
+      %w[r shell gitignore gitattributes gitmodules sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
+      %w[haskell lua] => { line: '--', block_start: '{-', block_end: '-}' },
+      %w[m tex] => { line: '%', block_start: nil, block_end: nil }
     }
 
     changes.each do |file, file_changes|
