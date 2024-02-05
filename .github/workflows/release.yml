@@ -33,7 +33,7 @@ jobs:
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
         shell: bash
-
+# TODO: A line that includes multiple action items (BUG FIXME) is only counted once, such as this one
     outputs:
       versionChanged: ${{ steps.check_version.outputs.changed }}
       newVersion: ${{ steps.get_version.outputs.version }}

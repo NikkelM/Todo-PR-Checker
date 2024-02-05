@@ -166,9 +166,8 @@ helpers do
       )
     else
       app_comment = fetch_bot_comment(full_repo_name, pull_number)
-=begin This is a block comment, any actions items it includes such as BUG
-TODO or FIXME will cause the app to create a comment
-- no matter what line of the comment they are on!
+=begin This is a block comment, any actions items it includes such as BUG 
+or FIXME will cause the app to create a comment - no matter what line of the comment they are on!
 =end
 # If action items are grouped closely together in code, the app will render them in the same code block
       if app_comment
