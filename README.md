@@ -12,7 +12,7 @@ The app is hosted using Google Cloud Run.
 To start a local app, you can use [https://smee.io/](https://smee.io/) to create a webhook that will forward to your local app, such as:
 
 ```bash
-smee --url https://smee.io/b2p7TRjSjwxQDJ --path /event_handler --port 3000
+smee --url https://smee.io/b2p7TRjSjwxQDJ --path / --port 3000
 ```
 
 Make sure to also set the Webhook URL in the app settings to the same URL.
@@ -20,5 +20,5 @@ Make sure to also set the Webhook URL in the app settings to the same URL.
 Then, you can start the app with:
 
 ```bash
-ruby app.rb
+ruby ./app.rb
 ```

@@ -111,15 +111,25 @@ helpers do
     todo_changes = check_for_todos(changes)
 
     if todo_changes.any?
+      type_counts = todo_changes.values.flatten.group_by { |change| change[:type] }.transform_values(&:count)
       number_of_todos = todo_changes.values.flatten.count
       comment_body = if number_of_todos == 1
                        "There is 1 unresolved action item in this Pull Request:\n\n"
                      else
                        "There are #{number_of_todos} unresolved action items in this Pull Request:\n\n"
                      end
+      comment_body += "\n| Action Item | Count |\n| --- | --- |\n"
+      type_counts.each do |type, count|
+        comment_body += "| #{type.capitalize} | #{count} |\n"
+      end
       todo_changes.each do |file, changes|
         file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
-        comment_body += "## [`#{file}`](#{file_link}):\n"
+        num_items = if changes.count == 1
+                      '1 item'
+                    else
+                      "#{changes.count} items"
+                    end
+        comment_body += "\n## [`#{file}`](#{file_link}) (#{num_items}):\n"
         changes.sort_by! { |change| change[:line] }
         grouped_changes = changes.slice_when { |prev, curr| curr[:line] - prev[:line] > 3 }.to_a
         grouped_changes.each do |group|
@@ -252,7 +262,7 @@ helpers do
           end
 
           if text.downcase.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
-            file_todos << change
+            file_todos << change.merge(type: keyword)
             break
           end
         end
