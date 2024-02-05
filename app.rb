@@ -23,7 +23,10 @@ APP_IDENTIFIER = ENV['GITHUB_APP_IDENTIFIER']
 configure :development do
   set :logging, Logger::DEBUG
 end
-
+=begin Not a BUG: Don't worry about words that contain action items
+lines like this one will be ignored - it's really BUGGING me when action items are misreported!
+The line above is only shown in the app's comment because the lines above and below contain a TODO
+=end
 puts "Running Todo PR Checker version: #{VERSION}"
 
 before '/' do

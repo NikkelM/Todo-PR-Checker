@@ -3,11 +3,12 @@
 <p align="center">
   <img src="./development/images/icon/images/icon.png" width="150" alt="Todo PR Checker">
 </p>
-<!-- The app will only report on TODO items in code comments -->
+<!-- TODO: The app will only report on TODO items in code comments, each line is only counted once. -->
 Do you keep forgetting to resolve that one `// TODO:...` or fix the last ` # Bug...` before merging your Pull Requests?
 <!-- 
 The capitalization of the todo, FixMe or BUG does not matter.
-Neither does it, where in the comment the TODO is located.
+If action items are located close to each other, the embedded code link will contain a range of lines,
+as is happening here. It also does not matter where in the comment the TODO is located.
  -->
 
 The Todo PR Checker will make sure that doesn't happen anymore.
