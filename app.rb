@@ -157,7 +157,6 @@ helpers do
         )
       end
 
-      # TODO: Improve the check summary after a run
       @installation_client.update_check_run(
         @payload['repository']['full_name'],
         @payload['check_run']['id'],
@@ -177,11 +176,6 @@ helpers do
         )
       end
 
-=begin Todo: This is a block comment.
-  Any action items in this block will cause the
-  todo check to fail.
-=end
-# todo: any action items that are close to each other will also be rendered in the same code block
       @installation_client.update_check_run(
         @payload['repository']['full_name'],
         @payload['check_run']['id'],
