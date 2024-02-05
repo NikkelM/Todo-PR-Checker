@@ -7,7 +7,7 @@
 Do you keep forgetting to resolve that one `// TODO:...` or fix the last ` # Bug...` before merging your Pull Requests?
 
 The Todo PR Checker will make sure that doesn't happen anymore.
-The app will check all code changes in your open Pull Requests for remaining `Todo`, `Fixme` etc. action items in code comments and leave a comment on the PR with a list and links to any items that were found.
+The app checks all code changes in your open Pull Requests for remaining `Todo`, `Fixme` etc. action items in code comments and leaves a comment on the PR with embedded code links to any items that were found.
 
 This list will update whenever new changes are pushed, so you always know exactly how much work is left.
 
