@@ -113,10 +113,10 @@ helpers do
     if todo_changes.any?
       number_of_todos = todo_changes.values.flatten.count
       comment_body = if number_of_todos == 1
-                      "There is 1 unresolved action item in this Pull Request:\n\n"
-                    else
-                     "There are #{number_of_todos} unresolved action items in this Pull Request:\n\n"
-                    end
+                       "There is 1 unresolved action item in this Pull Request:\n\n"
+                     else
+                       "There are #{number_of_todos} unresolved action items in this Pull Request:\n\n"
+                     end
       todo_changes.each do |file, changes|
         file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
         comment_body += "## [`#{file}`](#{file_link}):\n"
@@ -131,8 +131,8 @@ helpers do
             comment_body += "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line}-L#{last_line} "
           end
         end
-        comment_body += "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
       end
+      comment_body += "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
       app_comment = fetch_bot_comment(full_repo_name, pull_number)
 
