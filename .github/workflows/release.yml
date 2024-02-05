@@ -22,7 +22,10 @@ jobs:
       - name: Get previous version
         id: get_previous_version
         run: |
-          echo "version=$(git diff HEAD^ version.rb | grep -oP "\K\d+\.\d+\.\d+")" >> $GITHUB_OUTPUT
+          version=$(git diff HEAD^ version.rb | grep -oP "\K\d+\.\d+\.\d+")
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo version
+        shell: bash
       
       - name: Check if version changed
         id: check_version
