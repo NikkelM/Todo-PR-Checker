@@ -26,6 +26,7 @@ end
 
 puts "Running Todo PR Checker version: #{VERSION}"
 
+# Before running the event handler, verify the webhook signature and authenticate the app
 before '/' do
   get_payload_request(request)
   verify_webhook_signature
@@ -48,6 +49,7 @@ post '/' do
   end
 
   if event_type == 'check_suite' && (@payload['action'] == 'requested' || @payload['action'] == 'rerequested')
+    # We only want to run a check if a Pull Request is associated with the event
     pull_request = @payload['check_suite']['pull_requests'].first
     if pull_request
       event_handled = true
@@ -73,6 +75,7 @@ end
 
 helpers do
   def create_check_run
+    # Depending on the event type, the commit SHA is in a different location
     sha = if @payload['pull_request']
             @payload['pull_request']['head']['sha']
           elsif @payload['check_run']
@@ -81,6 +84,7 @@ helpers do
             @payload['check_suite']['head_sha']
           end
 
+    # Create a new check run to report on the progress of the app, and associate it with the most recent commit 
     @installation_client.create_check_run(
       @payload['repository']['full_name'],
       'Todo PR Checker',
@@ -89,7 +93,8 @@ helpers do
     )
   end
 
-  def fetch_bot_comment(full_repo_name, pull_number)
+  # If the app has already created a comment on the Pull Request, we want to update it instead of creating a new one
+  def fetch_app_comment(full_repo_name, pull_number)
     comments = @installation_client.issue_comments(
       full_repo_name,
       pull_number,
@@ -99,7 +104,9 @@ helpers do
     comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
   end
 
+  # This method contains the main logic of the app, checking and reporting on action items in code comments
   def initiate_check_run
+    # As soon as the run is initiated, mark it as in progress on GitHub
     @installation_client.update_check_run(
       @payload['repository']['full_name'],
       @payload['check_run']['id'],
@@ -111,10 +118,13 @@ helpers do
     pull_requests = @payload['check_run']['pull_requests']
     pull_number = pull_requests.first['number'] if pull_requests.any?
 
+    # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
 
+    # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes = check_for_todos(changes)
 
+    # If any action items are found, create a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
       number_of_todos = todo_changes.values.flatten.count
       comment_body = if number_of_todos == 1
@@ -130,6 +140,7 @@ helpers do
                       "#{changes.count} items"
                     end
         comment_body += "\n## [`#{file}`](#{file_link}) (#{num_items}):\n"
+        # Sort the changes by their line number, and group those that are close together into one embedded link
         changes.sort_by! { |change| change[:line] }
         grouped_changes = changes.slice_when { |prev, curr| curr[:line] - prev[:line] > 3 }.to_a
         grouped_changes.each do |group|
@@ -144,8 +155,9 @@ helpers do
       end
       comment_body += "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
-      app_comment = fetch_bot_comment(full_repo_name, pull_number)
+      app_comment = fetch_app_comment(full_repo_name, pull_number)
 
+      # Post or update the comment with the found action items
       if app_comment
         @installation_client.update_comment(
           full_repo_name,
@@ -162,6 +174,8 @@ helpers do
         )
       end
 
+      # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
+      # TODO: Add a run summary to the check run, to give a quick overview of the found action items
       @installation_client.update_check_run(
         @payload['repository']['full_name'],
         @payload['check_run']['id'],
@@ -169,9 +183,12 @@ helpers do
         conclusion: 'failure',
         accept: 'application/vnd.github+json'
       )
+    # If no action items were found 
     else
-      app_comment = fetch_bot_comment(full_repo_name, pull_number)
+      app_comment = fetch_app_comment(full_repo_name, pull_number)
 
+      # If the app has previously created a comment, update it to indicate that all action items have been resolved
+      # If the app has not previously created a comment, it does not need to do anything
       if app_comment
         @installation_client.update_comment(
           full_repo_name,
@@ -181,6 +198,8 @@ helpers do
         )
       end
 
+      # Mark the check run as successful, as no action items were found
+      # TODO: Add a run summary to the check run
       @installation_client.update_check_run(
         @payload['repository']['full_name'],
         @payload['check_run']['id'],
@@ -191,6 +210,7 @@ helpers do
     end
   end
 
+  # Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
   def get_pull_request_changes(full_repo_name, pull_number)
     uri = URI("https://api.github.com/repos/#{full_repo_name}/pulls/#{pull_number}")
     req = Net::HTTP::Get.new(uri)
@@ -207,6 +227,8 @@ helpers do
     line_number = 0
     changes = {}
 
+    # For each diff, extract the file name, line number in the new file, and the line contents
+    # Group the lines by file name in a hash
     diff.each_line do |line|
       if line.start_with?('+++')
         current_file = line[6..].strip
@@ -223,6 +245,7 @@ helpers do
     changes
   end
 
+  # Checks changed lines in supported file types for action items in code comments ("Todos")
   def check_for_todos(changes)
     keywords = %w[todo fixme bug]
     todo_changes = {}
@@ -238,21 +261,27 @@ helpers do
       %w[m tex] => { line: '%', block_start: nil, block_end: nil }
     }
 
+    # Changes are grouped by file name
     changes.each do |file, file_changes|
       file_type = File.extname(file).delete('.')
       comment_char = comment_chars.find { |k, _| k.include?(file_type) }
 
+      # If there is no mapping for the file type, skip it
       next unless comment_char
 
       file_todos = []
+      # Check each line in the file for action items
       file_changes.each do |change|
         text = change[:text].strip
 
+        # If the line starts or ends a block comment, set the flag accordingly
+        # This flag is used to determine if a following line is part of a block comment or a normal line of code
         if comment_char[1][:block_start] && comment_char[1][:block_end]
           in_block_comment = true if text.start_with?(comment_char[1][:block_start])
           in_block_comment = false if text.end_with?(comment_char[1][:block_end])
         end
 
+        # For each of the supported action items ("keywords"), check if they are contained in the line
         keywords.each do |keyword|
           if comment_char[1][:block_start] && comment_char[1][:block_end]
             regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{keyword}\b#{Regexp.escape(comment_char[1][:block_end])})/
