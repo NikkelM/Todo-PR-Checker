@@ -48,6 +48,7 @@ post '/' do
 
   # If we got an event that wasn't meant for our app, return early
   400 if @payload.dig(event_type, 'app', 'id')&.to_s != APP_IDENTIFIER
+  puts "Continuing..."
 
   # If a Pull Request was opened, we want to *create* a new check run (it is not yet executed)
   if event_type == 'pull_request' && @payload['action'] == 'opened'
