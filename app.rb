@@ -194,7 +194,7 @@ helpers do
 
         # If the line starts or ends a block comment, set the flag accordingly
         # This flag is used to determine if a following line is part of a block comment or a normal line of code
-        if comment_char[1][:block_start] && comment_char[1][:block_end]
+        if comment_char[1][:block_start]
           in_block_comment = true if text.start_with?(comment_char[1][:block_start])
           in_block_comment = false if text.end_with?(comment_char[1][:block_end])
         end
@@ -202,7 +202,7 @@ helpers do
         # For each of the supported action items ("keywords"), check if they are contained in the line
         keywords.each do |keyword|
           # Depending on if the file type supports block comments, use a different regex to match the keyword
-          regex = if comment_char[1][:block_start] && comment_char[1][:block_end]
+          regex = if comment_char[1][:block_start]
                     /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{keyword}\b#{Regexp.escape(comment_char[1][:block_end])})/
                   else
                     /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b)/
