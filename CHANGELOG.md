@@ -3,7 +3,9 @@
 ## v1.1.1
 
 <!--Releasenotes start-->
-- The server now sends a different status code if a webhook was received, but not handled.
+- The app is more restrictive and efficient in handling received webhook events, meaning it only handles those events that are relevant to the app.
+- Improved the maintainability and readability of the app and its code.
+- The server now sends a different status code if a webhook was received, but not handled, which improves server-side debugging.
 <!--Releasenotes end-->
 
 ## v1.1.0
