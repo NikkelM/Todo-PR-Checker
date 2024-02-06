@@ -87,7 +87,7 @@ helpers do
           end
 
     # Create a new check run to report on the progress of the app, and associate it with the most recent commit
-    @installation_client.create_check_run(@payload['repository']['full_name'], APP_FRIENDLY_NAME, sha, status: 'queued')
+    @installation_client.create_check_run(@payload['repository']['full_name'], APP_FRIENDLY_NAME, sha, status: 'queued', accept: 'application/vnd.github+json')
   end
 
   # (2) Contains the main logic of the app, checking and reporting on action items in code comments during a CI check
@@ -98,7 +98,7 @@ helpers do
     check_run_id = @payload['check_run']['id']
 
     # As soon as the run is initiated, mark it as in progress on GitHub
-    @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress')
+    @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
@@ -109,30 +109,30 @@ helpers do
     # If the app has previously created a comment on the Pull Request, fetch it
     app_comment = fetch_app_comment(full_repo_name, pull_number)
 
-    # If any action items are found, create a comment on the Pull Request with embedded links to the relevant lines
+    # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
-      comment_body = parse_todo_changes(todo_changes, full_repo_name)
+      comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name)
 
       # Post or update the comment with the found action items
       if app_comment
-        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body)
+        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
       else
-        @installation_client.add_comment(full_repo_name, pull_number, comment_body)
+        @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
       end
 
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', accept: 'application/vnd.github+json')
     # If no action items were found
     else
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
       # If the app has not previously created a comment, it does not need to do anything
       if app_comment
         comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
-        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body)
+        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
       end
 
       # Mark the check run as successful, as no action items were found
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success', accept: 'application/vnd.github+json')
     end
   end
 
@@ -231,8 +231,8 @@ helpers do
     todo_changes
   end
 
-  # (5) Creates a comment from the found action items, with embedded links to the relevant lines
-  def parse_todo_changes(todo_changes, full_repo_name)
+  # (5) Creates a comment text from the found action items, with embedded links to the relevant lines
+  def create_pr_comment_from_changes(todo_changes, full_repo_name)
     number_of_todos = todo_changes.values.flatten.count
     comment_body = if number_of_todos == 1
                      "There is **1** unresolved action item in this Pull Request:\n\n"
@@ -267,11 +267,7 @@ helpers do
 
   # (6) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
   def fetch_app_comment(full_repo_name, pull_number)
-    comments = @installation_client.issue_comments(
-      full_repo_name,
-      pull_number,
-      accept: 'application/vnd.github.v3+json'
-    )
+    comments = @installation_client.issue_comments(full_repo_name, pull_number, accept: 'application/vnd.github+json')
 
     comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
   end
