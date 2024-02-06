@@ -75,7 +75,7 @@ post '/' do
 end
 
 helpers do
-  # Creates an empty check run on GitHub associated with the most recent commit, but does not run the app's logic
+  # (1) Creates an empty check run on GitHub associated with the most recent commit, but does not run the app's logic
   def create_check_run
     # Depending on the event type, the commit SHA is in a different location
     sha = if @payload['pull_request']
@@ -95,7 +95,7 @@ helpers do
     )
   end
 
-  # This method contains the main logic of the app, checking and reporting on action items in code comments
+  # (2) Contains the main logic of the app, checking and reporting on action items in code comments during a CI check
   def initiate_check_run
     full_repo_name = @payload['repository']['full_name']
     pull_requests = @payload['check_run']['pull_requests']
@@ -143,52 +143,7 @@ helpers do
     end
   end
 
-  # If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
-  def fetch_app_comment(full_repo_name, pull_number)
-    comments = @installation_client.issue_comments(
-      full_repo_name,
-      pull_number,
-      accept: 'application/vnd.github.v3+json'
-    )
-
-    comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
-  end
-
-  # Creates a comment from the found action items, with embedded links to the relevant lines
-  def parse_todo_changes(todo_changes, full_repo_name)
-    number_of_todos = todo_changes.values.flatten.count
-    comment_body = if number_of_todos == 1
-                     "There is **1** unresolved action item in this Pull Request:\n\n"
-                   else
-                     "There are **#{number_of_todos}** unresolved action items in this Pull Request:\n\n"
-                   end
-    todo_changes.each do |file, changes|
-      file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
-      num_items = if changes.count == 1
-                    '1 item'
-                  else
-                    "#{changes.count} items"
-                  end
-      comment_body += "\n## [`#{file}`](#{file_link}) (#{num_items}):\n"
-      # Sort the changes by their line number, and group those that are close together into one embedded link
-      changes.sort_by! { |change| change[:line] }
-      grouped_changes = changes.slice_when { |prev, curr| curr[:line] - prev[:line] > 3 }.to_a
-      grouped_changes.each do |group|
-        first_line = group.first[:line]
-        last_line = group.last[:line]
-        comment_body += if first_line == last_line
-                          "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line} "
-                        else
-                          "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line}-L#{last_line} "
-                        end
-      end
-    end
-    comment_body += "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
-
-    comment_body
-  end
-
-  # Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
+  # (3) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
   def get_pull_request_changes(full_repo_name, pull_number)
     uri = URI("https://api.github.com/repos/#{full_repo_name}/pulls/#{pull_number}")
     req = Net::HTTP::Get.new(uri)
@@ -223,7 +178,7 @@ helpers do
     changes
   end
 
-  # Checks changed lines in supported file types for action items in code comments ("Todos")
+  # (4) Checks changed lines in supported file types for action items in code comments ("Todos")
   def check_for_todos(changes)
     keywords = %w[todo fixme bug]
     todo_changes = {}
@@ -283,6 +238,54 @@ helpers do
     todo_changes
   end
 
+  # (5) Creates a comment from the found action items, with embedded links to the relevant lines
+  def parse_todo_changes(todo_changes, full_repo_name)
+    number_of_todos = todo_changes.values.flatten.count
+    comment_body = if number_of_todos == 1
+                     "There is **1** unresolved action item in this Pull Request:\n\n"
+                   else
+                     "There are **#{number_of_todos}** unresolved action items in this Pull Request:\n\n"
+                   end
+    todo_changes.each do |file, changes|
+      file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
+      num_items = if changes.count == 1
+                    '1 item'
+                  else
+                    "#{changes.count} items"
+                  end
+      comment_body += "\n## [`#{file}`](#{file_link}) (#{num_items}):\n"
+      # Sort the changes by their line number, and group those that are close together into one embedded link
+      changes.sort_by! { |change| change[:line] }
+      grouped_changes = changes.slice_when { |prev, curr| curr[:line] - prev[:line] > 3 }.to_a
+      grouped_changes.each do |group|
+        first_line = group.first[:line]
+        last_line = group.last[:line]
+        comment_body += if first_line == last_line
+                          "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line} "
+                        else
+                          "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line}-L#{last_line} "
+                        end
+      end
+    end
+    comment_body += "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
+
+    comment_body
+  end
+
+  # (6) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
+  def fetch_app_comment(full_repo_name, pull_number)
+    comments = @installation_client.issue_comments(
+      full_repo_name,
+      pull_number,
+      accept: 'application/vnd.github.v3+json'
+    )
+
+    comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
+  end
+
+  ##############################################################################################################
+  ########## The following methods contain boilerplate code for authenticating the app against GitHub ##########
+  ##############################################################################################################
   # Boilerplate code for parsing the webhook payload
   def get_payload_request(request)
     request.body.rewind
@@ -294,7 +297,7 @@ helpers do
     end
   end
 
-  # Boilerplate code to create a JWT for authenticating the app
+  # Boilerplate code to create a JSON Web Token to authenticate the app to GitHub
   def authenticate_app
     payload = {
       iat: Time.now.to_i,
@@ -307,14 +310,14 @@ helpers do
     @authenticate_app ||= Octokit::Client.new(bearer_token: jwt)
   end
 
-  # Boilerplate code to authenticate the app installation
+  # Boilerplate code to authenticate the app's installation in a repository
   def authenticate_installation(payload)
     @installation_id = payload['installation']['id']
     @installation_token = @authenticate_app.create_app_installation_access_token(@installation_id)[:token]
     @installation_client = Octokit::Client.new(bearer_token: @installation_token)
   end
 
-  # Boilerplate code to verify the webhook signature
+  # Boilerplate code to verify the signature of the webhook received from GitHub
   def verify_webhook_signature
     their_signature_header = request.env['HTTP_X_HUB_SIGNATURE'] || 'sha1='
     method, their_digest = their_signature_header.split('=')
