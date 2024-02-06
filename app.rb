@@ -43,6 +43,9 @@ post '/' do
   event_type = request.env['HTTP_X_GITHUB_EVENT']
   event_handled = false
 
+  puts @payload.dig(event_type, 'app', 'id')&.to_s
+  puts @payload.dig(event_type, 'app', 'id')&.to_s != APP_IDENTIFIER
+
   # If we got an event that wasn't meant for our app, return early
   400 if @payload.dig(event_type, 'app', 'id')&.to_s != APP_IDENTIFIER
 
