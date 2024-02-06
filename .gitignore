@@ -1,6 +1,7 @@
 # Custom
 .env
 *.pem
+*notes.txt
 
 # Ruby
 *.gem

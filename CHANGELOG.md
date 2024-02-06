@@ -1,10 +1,17 @@
 # Changelog
 
-## v1.1.1
+## v1.1.2
 
 <!--Releasenotes start-->
-- The server now sends a different status code if a webhook was received, but not handled.
+- The app now is more restrictive when handling received webhook events, meaning it only handles those events that are relevant to the app.
+- The app now uses a more efficient and native way of getting Pull Request changes.
+- Optimized some code paths to reduce the time it takes to process a Pull Request change.
+- Improved the maintainability and readability of the app and its code.
 <!--Releasenotes end-->
+
+## v1.1.1
+
+- The server now sends a different status code if a webhook was received, but not handled.
 
 ## v1.1.0
 

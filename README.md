@@ -14,7 +14,7 @@ This list will update whenever new changes are pushed, so you always know exactl
 The app supports a wide array of programming languages and action items.
 Should you find that your language of choice or action item is not supported, feel free to open an issue.
 
-The app is built automaticall using Google Cloud Build and hosted through Google Cloud Run.
+The app is built automatically using Google Cloud Build and hosted through Google Cloud Run.
 
 ## In-Depth
 
@@ -46,9 +46,10 @@ bundle install
 Then create a `.env` file with the following content:
 
 ```text
-GITHUB_APP_ID=${your_app_id}
-GITHUB_PRIVATE_KEY=${app_private_key}
-GITHUB_WEBHOOK_SECRET=${app_webhook_secret}
+GITHUB_APP_ID=${App ID from the GitHub App settings}
+GITHUB_PRIVATE_KEY=${Private key generated in the GitHub App settings}
+GITHUB_WEBHOOK_SECRET=${Webhook secret set in the GitHub App settings}
+APP_FRIENDLY_NAME=${Name of the CI check}
 ```
 
 The documentation linked above describes where to obtain these values.
@@ -56,10 +57,10 @@ The documentation linked above describes where to obtain these values.
 You can then use [smee](https://smee.io/) to create a webhook that will forward the webhook events to your local app:
 
 ```bash
-smee --url smee_url --path / --port 3000
+smee --url https://smee.io/gsPiE7FUxg0q3TPz --path / --port 3000
 ```
 
-Make sure to also set the Webhook URL in the app settingson GitHub to the same `smee_url`.
+Make sure to also set the Webhook URL in the app settings on GitHub to the same smee URL, like `https://smee.io/gsPiE7FUxg0q3TPz` in the example.
 
 Then, you can start the app with:
 
@@ -67,7 +68,7 @@ Then, you can start the app with:
 ruby ./app.rb
 ```
 
-If you have installed the app in a repository, and set up the webhooks correctly, you should now see the app receiving events when you create or update a Pull Request as such:
+If you have correctly created and installed the app in a repository, and set up the webhooks correctly, you should now see the app receiving events like these when you create or update a Pull Request:
 
 ```text
 D, [2024-02-05T14:04:28.359807 #26008] DEBUG -- : ---- received event check_suite
@@ -84,6 +85,10 @@ D, [2024-02-05T14:04:33.227460 #26008] DEBUG -- : ----    action completed
 D, [2024-02-05T14:04:33.351184 #26008] DEBUG -- : ---- received event check_run
 D, [2024-02-05T14:04:33.351388 #26008] DEBUG -- : ----    action completed
 ```
+
+### Troubleshooting
+
+If your private key is being rejected/fails to parse, replace the line breaks of the key in your `.env` file with `\n`.
 
 ---
 
