@@ -16,9 +16,9 @@ require_relative 'version'
 set :bind, '0.0.0.0'
 set :port, ENV['PORT'] || '3000'
 
-PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV['GITHUB_PRIVATE_KEY'].gsub('\n', "\n"))
-WEBHOOK_SECRET = ENV['GITHUB_WEBHOOK_SECRET']
-APP_IDENTIFIER = ENV['GITHUB_APP_IDENTIFIER']
+PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV.fetch('GITHUB_PRIVATE_KEY', nil).gsub('\n', "\n"))
+WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
+APP_IDENTIFIER = ENV.fetch('GITHUB_APP_IDENTIFIER', nil)
 
 configure :development do
   set :logging, Logger::DEBUG
@@ -31,9 +31,7 @@ before '/' do
   get_payload_request(request)
   verify_webhook_signature
 
-  unless @payload['repository'].nil?
-    halt 400 if (@payload['repository']['name'] =~ /[0-9A-Za-z\-\_]+/).nil?
-  end
+  halt 400 if @payload['repository'].nil? || (@payload['repository']['name'] =~ /[0-9A-Za-z\-\_]+/).nil?
 
   authenticate_app
   authenticate_installation(@payload)
@@ -84,7 +82,7 @@ helpers do
             @payload['check_suite']['head_sha']
           end
 
-    # Create a new check run to report on the progress of the app, and associate it with the most recent commit 
+    # Create a new check run to report on the progress of the app, and associate it with the most recent commit
     @installation_client.create_check_run(
       @payload['repository']['full_name'],
       'Todo PR Checker',
@@ -93,7 +91,7 @@ helpers do
     )
   end
 
-  # If the app has already created a comment on the Pull Request, we want to update it instead of creating a new one
+  # If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
   def fetch_app_comment(full_repo_name, pull_number)
     comments = @installation_client.issue_comments(
       full_repo_name,
@@ -124,38 +122,12 @@ helpers do
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes = check_for_todos(changes)
 
+    # If the app has previously created a comment on the Pull Request, fetch it
+    app_comment = fetch_app_comment(full_repo_name, pull_number)
+
     # If any action items are found, create a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
-      number_of_todos = todo_changes.values.flatten.count
-      comment_body = if number_of_todos == 1
-                       "There is **1** unresolved action item in this Pull Request:\n\n"
-                     else
-                       "There are **#{number_of_todos}** unresolved action items in this Pull Request:\n\n"
-                     end
-      todo_changes.each do |file, changes|
-        file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
-        num_items = if changes.count == 1
-                      '1 item'
-                    else
-                      "#{changes.count} items"
-                    end
-        comment_body += "\n## [`#{file}`](#{file_link}) (#{num_items}):\n"
-        # Sort the changes by their line number, and group those that are close together into one embedded link
-        changes.sort_by! { |change| change[:line] }
-        grouped_changes = changes.slice_when { |prev, curr| curr[:line] - prev[:line] > 3 }.to_a
-        grouped_changes.each do |group|
-          first_line = group.first[:line]
-          last_line = group.last[:line]
-          if first_line == last_line
-            comment_body += "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line} "
-          else
-            comment_body += "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line}-L#{last_line} "
-          end
-        end
-      end
-      comment_body += "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
-
-      app_comment = fetch_app_comment(full_repo_name, pull_number)
+      comment_body = parse_todo_changes(todo_changes, full_repo_name)
 
       # Post or update the comment with the found action items
       if app_comment
@@ -183,10 +155,8 @@ helpers do
         conclusion: 'failure',
         accept: 'application/vnd.github+json'
       )
-    # If no action items were found 
+    # If no action items were found
     else
-      app_comment = fetch_app_comment(full_repo_name, pull_number)
-
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
       # If the app has not previously created a comment, it does not need to do anything
       if app_comment
@@ -208,6 +178,40 @@ helpers do
         accept: 'application/vnd.github+json'
       )
     end
+  end
+
+  # Creates a comment from the found action items, with embedded links to the relevant lines
+  def parse_todo_changes(todo_changes, full_repo_name)
+    number_of_todos = todo_changes.values.flatten.count
+    comment_body = if number_of_todos == 1
+                     "There is **1** unresolved action item in this Pull Request:\n\n"
+                   else
+                     "There are **#{number_of_todos}** unresolved action items in this Pull Request:\n\n"
+                   end
+    todo_changes.each do |file, changes|
+      file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
+      num_items = if changes.count == 1
+                    '1 item'
+                  else
+                    "#{changes.count} items"
+                  end
+      comment_body += "\n## [`#{file}`](#{file_link}) (#{num_items}):\n"
+      # Sort the changes by their line number, and group those that are close together into one embedded link
+      changes.sort_by! { |change| change[:line] }
+      grouped_changes = changes.slice_when { |prev, curr| curr[:line] - prev[:line] > 3 }.to_a
+      grouped_changes.each do |group|
+        first_line = group.first[:line]
+        last_line = group.last[:line]
+        comment_body += if first_line == last_line
+                          "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line} "
+                        else
+                          "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line}-L#{last_line} "
+                        end
+      end
+    end
+    comment_body += "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
+
+    comment_body
   end
 
   # Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
@@ -234,7 +238,7 @@ helpers do
         current_file = line[6..].strip
         changes[current_file] = []
       elsif line.start_with?('@@')
-        line_number = line.split(' ')[2].split(',')[0].to_i - 1
+        line_number = line.split()[2].split(',')[0].to_i - 1
       elsif line.start_with?('+') && !line.start_with?('+++')
         changes[current_file] << { line: line_number, text: line[1..] }
       end
@@ -284,11 +288,11 @@ helpers do
         # For each of the supported action items ("keywords"), check if they are contained in the line
         keywords.each do |keyword|
           # Depending on if the file type supports block comments, use a different regex to match the keyword
-          if comment_char[1][:block_start] && comment_char[1][:block_end]
-            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{keyword}\b#{Regexp.escape(comment_char[1][:block_end])})/
-          else
-            regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b)/
-          end
+          regex = if comment_char[1][:block_start] && comment_char[1][:block_end]
+                    /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{keyword}\b#{Regexp.escape(comment_char[1][:block_end])})/
+                  else
+                    /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b)/
+                  end
 
           # If the keyword is contained in the line, add it to the output collection
           if text.downcase.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
