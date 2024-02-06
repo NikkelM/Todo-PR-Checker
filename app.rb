@@ -43,32 +43,27 @@ post '/' do
   event_type = request.env['HTTP_X_GITHUB_EVENT']
   event_handled = false
 
+  # If we got an event that wasn't meant for our app, return early
+  400 if @payload.dig(event_type, 'app', 'id')&.to_s != APP_IDENTIFIER
+
+  # If a Pull Request was opened, we want to *create* a new check run (it is not yet executed)
   if event_type == 'pull_request' && @payload['action'] == 'opened'
     event_handled = true
     create_check_run
   end
 
-  # TODO: Does this update?
-  # if event_type == 'check_suite' && (@payload['action'] == 'requested' || @payload['action'] == 'rerequested')
-  #   # We only want to run a check if a Pull Request is associated with the event
-  #   pull_request = @payload['check_suite']['pull_requests'].first
-  #   if pull_request
-  #     event_handled = true
-  #     create_check_run
-  #   end
-  # end
+  # If a new check suite is requested, we want to *create* a new check run (it is not yet executed)
+  # We only want to create a check if a Pull Request is associated with the event
+  if event_type == 'check_suite' && @payload['check_suite']['pull_requests'].first && (@payload['action'] == 'requested' || @payload['action'] == 'rerequested')
+    event_handled = true
+    create_check_run
+  end
 
-  if event_type == 'check_run' && @payload['check_run']['app']['id'].to_s == APP_IDENTIFIER
-    pull_request = @payload['check_run']['pull_requests'].first
-    if pull_request
-      if @payload['action'] == 'created'
-        event_handled = true
-        initiate_check_run
-      elsif @payload['action'] == 'rerequested'
-        event_handled = true
-        create_check_run
-      end
-    end
+  # If a new check run is requested, we want to run the app logic and report the results
+  # We only want to create a check if a Pull Request is associated with the event
+  if event_type == 'check_run' && @payload['check_run']['pull_requests'].first && (@payload['action'] == 'created' || @payload['action'] == 'rerequested')
+    event_handled = true
+    initiate_check_run
   end
 
   event_handled ? 200 : 204
