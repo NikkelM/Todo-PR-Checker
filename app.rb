@@ -121,7 +121,6 @@ helpers do
       end
 
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      # TODO: Add a run summary to the check run, to give a quick overview of the found action items
       @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure')
     # If no action items were found
     else
@@ -133,7 +132,6 @@ helpers do
       end
 
       # Mark the check run as successful, as no action items were found
-      # TODO: Add a run summary to the check run
       @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success')
     end
   end
