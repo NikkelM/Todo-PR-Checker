@@ -77,13 +77,13 @@ end
 helpers do
   # (1) Creates an empty check run on GitHub associated with the most recent commit, but does not run the app's logic
   def create_check_run
+    event_type = request.env['HTTP_X_GITHUB_EVENT']
+
     # Depending on the event type, the commit SHA is in a different location
-    sha = if @payload['pull_request']
+    sha = if event_type == 'pull_request'
             @payload['pull_request']['head']['sha']
-          elsif @payload['check_run']
-            @payload['check_run']['head_sha']
           else
-            @payload['check_suite']['head_sha']
+            @payload[event_type]['head_sha']
           end
 
     # Create a new check run to report on the progress of the app, and associate it with the most recent commit
@@ -91,7 +91,14 @@ helpers do
       @payload['repository']['full_name'],
       APP_FRIENDLY_NAME,
       sha,
-      accept: 'application/vnd.github+json'
+      status: 'queued',
+      actions: [
+        {
+          "label": "Retry",
+          "description": "Retry the run",
+          "identifier": "retry_identifier"
+        }
+      ]
     )
   end
 
@@ -103,7 +110,7 @@ helpers do
     check_run_id = @payload['check_run']['id']
 
     # As soon as the run is initiated, mark it as in progress on GitHub
-    @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
+    @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress')
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
@@ -127,7 +134,7 @@ helpers do
 
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
       # TODO: Add a run summary to the check run, to give a quick overview of the found action items
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure')
     # If no action items were found
     else
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
@@ -139,7 +146,7 @@ helpers do
 
       # Mark the check run as successful, as no action items were found
       # TODO: Add a run summary to the check run
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success', accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success')
     end
   end
 
