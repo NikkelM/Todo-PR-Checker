@@ -122,10 +122,9 @@ helpers do
 
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
       @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', accept: 'application/vnd.github+json')
-    # If no action items were found
     else
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
-      # If the app has not previously created a comment, it does not need to do anything
+      # If the app has not previously created a comment, we don't needlessly create one
       if app_comment
         comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
         @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
@@ -138,16 +137,7 @@ helpers do
 
   # (3) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
   def get_pull_request_changes(full_repo_name, pull_number)
-    uri = URI("https://api.github.com/repos/#{full_repo_name}/pulls/#{pull_number}")
-    req = Net::HTTP::Get.new(uri)
-    req['Accept'] = 'application/vnd.github.v3.diff'
-    req['Authorization'] = "token #{@installation_token}"
-
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') do |http|
-      http.request(req)
-    end
-
-    diff = res.body
+    diff = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github.diff')
 
     current_file = ''
     line_number = 0
