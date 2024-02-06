@@ -231,14 +231,16 @@ helpers do
                    else
                      "There are **#{number_of_todos}** unresolved action items in this Pull Request:\n\n"
                    end
+
     todo_changes.each do |file, changes|
       file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
       num_items = if changes.count == 1
-                    '1 item'
+                    '1 action item'
                   else
-                    "#{changes.count} items"
+                    "#{changes.count} action items"
                   end
       comment_body += "\n## [`#{file}`](#{file_link}) (#{num_items}):\n"
+
       # Sort the changes by their line number, and group those that are close together into one embedded link
       changes.sort_by! { |change| change[:line] }
       grouped_changes = changes.slice_when { |prev, curr| curr[:line] - prev[:line] > 3 }.to_a
