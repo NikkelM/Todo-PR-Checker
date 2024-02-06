@@ -13,6 +13,8 @@ require 'net/http'
 require 'uri'
 require_relative 'version'
 
+puts "Running Todo PR Checker version: #{VERSION}"
+
 set :bind, '0.0.0.0'
 set :port, ENV['PORT'] || '3000'
 
@@ -23,8 +25,6 @@ APP_IDENTIFIER = ENV.fetch('GITHUB_APP_IDENTIFIER', nil)
 configure :development do
   set :logging, Logger::DEBUG
 end
-
-puts "Running Todo PR Checker version: #{VERSION}"
 
 # Before running the event handler, verify the webhook signature and authenticate the app
 before '/' do
