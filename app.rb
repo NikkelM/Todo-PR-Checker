@@ -283,25 +283,29 @@ helpers do
 
         # For each of the supported action items ("keywords"), check if they are contained in the line
         keywords.each do |keyword|
+          # Depending on if the file type supports block comments, use a different regex to match the keyword
           if comment_char[1][:block_start] && comment_char[1][:block_end]
             regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{keyword}\b#{Regexp.escape(comment_char[1][:block_end])})/
           else
             regex = /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b)/
           end
 
+          # If the keyword is contained in the line, add it to the output collection
           if text.downcase.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
-            file_todos << change.merge(type: keyword)
+            file_todos << change
             break
           end
         end
       end
 
+      # We don't want to add files to the output collection if they don't contain any action items, as they shouldn't be posted in the comment
       todo_changes[file] = file_todos unless file_todos.empty?
     end
 
     todo_changes
   end
 
+  # Boilerplate code for parsing the webhook payload
   def get_payload_request(request)
     request.body.rewind
     @payload_raw = request.body.read
@@ -312,9 +316,12 @@ helpers do
     end
   end
 
+  # Boilerplate code to create a JWT for authenticating the app
   def authenticate_app
     payload = {
       iat: Time.now.to_i,
+      # JWT expiration time (10 minute maximum)
+      # We use 7 minutes to get around any clock skew between the app and GitHub
       exp: Time.now.to_i + (7 * 60),
       iss: APP_IDENTIFIER
     }
@@ -322,12 +329,14 @@ helpers do
     @authenticate_app ||= Octokit::Client.new(bearer_token: jwt)
   end
 
+  # Boilerplate code to authenticate the app installation
   def authenticate_installation(payload)
     @installation_id = payload['installation']['id']
     @installation_token = @authenticate_app.create_app_installation_access_token(@installation_id)[:token]
     @installation_client = Octokit::Client.new(bearer_token: @installation_token)
   end
 
+  # Boilerplate code to verify the webhook signature
   def verify_webhook_signature
     their_signature_header = request.env['HTTP_X_HUB_SIGNATURE'] || 'sha1='
     method, their_digest = their_signature_header.split('=')
