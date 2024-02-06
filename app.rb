@@ -143,18 +143,20 @@ helpers do
     line_number = 0
     changes = {}
 
-    # For each diff, extract the file name, line number in the new file, and the line contents
-    # Group the lines by file name in a hash
     diff.each_line do |line|
-      if line.start_with?('+++')
-        current_file = line[6..].strip
-        changes[current_file] = []
+      # This is the most common case, indicating a line was added to the file
+      if line.start_with?('+') && !line.start_with?('+++')
+        changes[current_file] << { line: line_number, text: line[1..] }
+      # Lines that start with @@ contain the the starting line and its length for a new block of changes, for the old and new file respectively
       elsif line.start_with?('@@')
         line_number = line.split()[2].split(',')[0].to_i - 1
-      elsif line.start_with?('+') && !line.start_with?('+++')
-        changes[current_file] << { line: line_number, text: line[1..] }
+      # Lines that start with +++ contain the new name of the file, which is the one we want to link to in the comment
+      elsif line.start_with?('+++')
+        current_file = line[6..].strip
+        changes[current_file] = []
       end
 
+      # We count the line numbers for lines in the new file, which means we need to exclude unchanged lines, and the special "no newline" line
       line_number += 1 unless line.start_with?('-') || line.chomp == '\ No newline at end of file'
     end
 
