@@ -18,9 +18,10 @@ puts "Running Todo PR Checker version: #{VERSION}"
 set :bind, '0.0.0.0'
 set :port, ENV['PORT'] || '3000'
 
-PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV.fetch('GITHUB_PRIVATE_KEY', nil).gsub('\n', "\n"))
-WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
+GITHUB_PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV.fetch('GITHUB_PRIVATE_KEY', nil).gsub('\n', "\n"))
+GITHUB_WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
 APP_IDENTIFIER = ENV.fetch('GITHUB_APP_IDENTIFIER', nil)
+APP_FRIENDLY_NAME = ENV.fetch('APP_FRIENDLY_NAME', 'Todo PR Checker')
 
 configure :development do
   set :logging, Logger::DEBUG
@@ -74,6 +75,7 @@ post '/' do
 end
 
 helpers do
+  # Creates an empty check run on GitHub associated with the most recent commit, but does not run the app's logic
   def create_check_run
     # Depending on the event type, the commit SHA is in a different location
     sha = if @payload['pull_request']
@@ -87,21 +89,10 @@ helpers do
     # Create a new check run to report on the progress of the app, and associate it with the most recent commit
     @installation_client.create_check_run(
       @payload['repository']['full_name'],
-      'Todo PR Checker',
+      APP_FRIENDLY_NAME,
       sha,
       accept: 'application/vnd.github+json'
     )
-  end
-
-  # If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
-  def fetch_app_comment(full_repo_name, pull_number)
-    comments = @installation_client.issue_comments(
-      full_repo_name,
-      pull_number,
-      accept: 'application/vnd.github.v3+json'
-    )
-
-    comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
   end
 
   # This method contains the main logic of the app, checking and reporting on action items in code comments
@@ -150,6 +141,17 @@ helpers do
       # TODO: Add a run summary to the check run
       @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success', accept: 'application/vnd.github+json')
     end
+  end
+
+  # If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
+  def fetch_app_comment(full_repo_name, pull_number)
+    comments = @installation_client.issue_comments(
+      full_repo_name,
+      pull_number,
+      accept: 'application/vnd.github.v3+json'
+    )
+
+    comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
   end
 
   # Creates a comment from the found action items, with embedded links to the relevant lines
@@ -301,7 +303,7 @@ helpers do
       exp: Time.now.to_i + (7 * 60),
       iss: APP_IDENTIFIER
     }
-    jwt = JWT.encode(payload, PRIVATE_KEY, 'RS256')
+    jwt = JWT.encode(payload, GITHUB_PRIVATE_KEY, 'RS256')
     @authenticate_app ||= Octokit::Client.new(bearer_token: jwt)
   end
 
@@ -316,7 +318,7 @@ helpers do
   def verify_webhook_signature
     their_signature_header = request.env['HTTP_X_HUB_SIGNATURE'] || 'sha1='
     method, their_digest = their_signature_header.split('=')
-    our_digest = OpenSSL::HMAC.hexdigest(method, WEBHOOK_SECRET, @payload_raw)
+    our_digest = OpenSSL::HMAC.hexdigest(method, GITHUB_WEBHOOK_SECRET, @payload_raw)
     halt 401 unless their_digest == our_digest
 
     logger.debug "---- received event #{request.env['HTTP_X_GITHUB_EVENT']}"

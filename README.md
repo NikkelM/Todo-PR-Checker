@@ -46,9 +46,10 @@ bundle install
 Then create a `.env` file with the following content:
 
 ```text
-GITHUB_APP_ID=${your_app_id}
-GITHUB_PRIVATE_KEY=${app_private_key}
-GITHUB_WEBHOOK_SECRET=${app_webhook_secret}
+GITHUB_APP_ID=${App ID from the GitHub App settings}
+GITHUB_PRIVATE_KEY=${Private key generated in the GitHub App settings}
+GITHUB_WEBHOOK_SECRET=${Webhook secret set in the GitHub App settings}
+APP_FRIENDLY_NAME=${Name of the CI check}
 ```
 
 The documentation linked above describes where to obtain these values.
