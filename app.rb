@@ -104,17 +104,13 @@ helpers do
 
   # This method contains the main logic of the app, checking and reporting on action items in code comments
   def initiate_check_run
-    # As soon as the run is initiated, mark it as in progress on GitHub
-    @installation_client.update_check_run(
-      @payload['repository']['full_name'],
-      @payload['check_run']['id'],
-      status: 'in_progress',
-      accept: 'application/vnd.github+json'
-    )
-
     full_repo_name = @payload['repository']['full_name']
     pull_requests = @payload['check_run']['pull_requests']
     pull_number = pull_requests.first['number'] if pull_requests.any?
+    check_run_id = @payload['check_run']['id']
+
+    # As soon as the run is initiated, mark it as in progress on GitHub
+    @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
@@ -131,52 +127,26 @@ helpers do
 
       # Post or update the comment with the found action items
       if app_comment
-        @installation_client.update_comment(
-          full_repo_name,
-          app_comment.id,
-          comment_body,
-          accept: 'application/vnd.github.v3+json'
-        )
+        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github.v3+json')
       else
-        @installation_client.add_comment(
-          full_repo_name,
-          pull_number,
-          comment_body,
-          accept: 'application/vnd.github.v3+json'
-        )
+        @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github.v3+json')
       end
 
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
       # TODO: Add a run summary to the check run, to give a quick overview of the found action items
-      @installation_client.update_check_run(
-        @payload['repository']['full_name'],
-        @payload['check_run']['id'],
-        status: 'completed',
-        conclusion: 'failure',
-        accept: 'application/vnd.github+json'
-      )
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', accept: 'application/vnd.github+json')
     # If no action items were found
     else
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
       # If the app has not previously created a comment, it does not need to do anything
       if app_comment
-        @installation_client.update_comment(
-          full_repo_name,
-          app_comment.id,
-          "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!",
-          accept: 'application/vnd.github.v3+json'
-        )
+        comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
+        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github.v3+json')
       end
 
       # Mark the check run as successful, as no action items were found
       # TODO: Add a run summary to the check run
-      @installation_client.update_check_run(
-        @payload['repository']['full_name'],
-        @payload['check_run']['id'],
-        status: 'completed',
-        conclusion: 'success',
-        accept: 'application/vnd.github+json'
-      )
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success', accept: 'application/vnd.github+json')
     end
   end
 
