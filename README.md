@@ -14,7 +14,7 @@ This list will update whenever new changes are pushed, so you always know exactl
 The app supports a wide array of programming languages and action items.
 Should you find that your language of choice or action item is not supported, feel free to open an issue.
 
-The app is built automaticall using Google Cloud Build and hosted through Google Cloud Run.
+The app is built automatically using Google Cloud Build and hosted through Google Cloud Run.
 
 ## In-Depth
 
