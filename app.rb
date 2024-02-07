@@ -273,7 +273,8 @@ helpers do
     begin
       @payload = JSON.parse @payload_raw
     rescue JSON::ParserError => e
-      raise "Invalid JSON (#{e}): #{@payload_raw}"
+      logger.debug "Invalid JSON (#{e}): #{@payload_raw}"
+      halt 400
     end
   end
 
