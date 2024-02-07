@@ -86,4 +86,4 @@ jobs:
           route: POST /repos/{owner}/{repo}/dispatches
           owner: ${{ github.repository_owner }}
           repo: ${{ github.repository }}
-          body: '{"event_type": "release_created"}'
+          event_type: release_created
