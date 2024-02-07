@@ -1,0 +1,16 @@
+{
+  "install": "bundle install --path ./.data/bundler",
+  "start": "bundle exec ruby app.rb",
+  "watch": {
+    "install": {
+      "include": [
+        "^Gemfile$"
+      ]
+    },
+    "restart": {
+      "include": [
+        "\\.rb$"
+      ]
+    }
+  }
+}
