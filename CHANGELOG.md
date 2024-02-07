@@ -3,7 +3,7 @@
 ## v1.1.3
 
 <!--Releasenotes start-->
-- The app is now hosted on [Glitch](https://glitch.com/).
+- Replaced an exception with a 400 status code when the app receives a webhook event with en empty payload.
 <!--Releasenotes end-->
 
 ## v1.1.2
