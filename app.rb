@@ -16,8 +16,7 @@ require_relative 'version'
 puts "Running Todo PR Checker version: #{VERSION}"
 
 set :bind, '0.0.0.0'
-# TODO: Should the ENV part of this be removed?
-set :port, ENV['PORT'] || '3000'
+set :port, '3000'
 
 GITHUB_PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV.fetch('GITHUB_PRIVATE_KEY', nil).gsub('\n', "\n"))
 GITHUB_WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
