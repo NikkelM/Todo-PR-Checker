@@ -51,7 +51,6 @@ post '/' do
   # If a Pull Request was opened, we want to *create* a new check run (it is not yet executed)
   if event_type == 'pull_request' && @payload['action'] == 'opened'
     event_handled = true
-    puts "Creating check run (pull_request) for action #{@payload['action']} and event #{event_type}"
     create_check_run
   end
 
@@ -59,7 +58,6 @@ post '/' do
   # We only want to create a check if a Pull Request is associated with the event
   if event_type == 'check_suite' && @payload['check_suite']['pull_requests'].first && (@payload['action'] == 'requested' || @payload['action'] == 'rerequested')
     event_handled = true
-    puts "Creating check run (check_suite) for action #{@payload['action']} and event #{event_type}"
     create_check_run
   end
 
@@ -67,10 +65,9 @@ post '/' do
   # We only want to create a check if a Pull Request is associated with the event
   if event_type == 'check_run' && @payload['check_run']['pull_requests'].first && (@payload['action'] == 'created' || @payload['action'] == 'rerequested')
     event_handled = true
-    puts "Initiating check run for action #{@payload['action']} and event #{event_type}"
     initiate_check_run
   end
-# TODO: Test comment
+
   event_handled ? 200 : 204
 end
 
