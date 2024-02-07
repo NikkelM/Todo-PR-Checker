@@ -2,10 +2,10 @@ name: Deploy to Glitch
 
 on:
   release:
-    types: [created]
+    types: [released]
 
 jobs:
-  sync:
+  GlitchDeploy:
     runs-on: ubuntu-latest
     steps:
       - name: Sync to Glitch Project
