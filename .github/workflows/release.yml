@@ -77,13 +77,3 @@ jobs:
           tag_name: v${{ needs.CheckVersion.outputs.newVersion }}
           name: v${{ needs.CheckVersion.outputs.newVersion }}
           body_path: RELEASE_NOTES.md
-      
-      - name: Dispatch repository event
-        uses: octokit/request-action@v2.x
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          route: POST /repos/{repo}/dispatches
-          repo: ${{ github.repository }}
-          event_type: release_created
-          client_payload: '{"version": "v${{ needs.CheckVersion.outputs.newVersion }}"}'

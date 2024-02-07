@@ -1,14 +1,10 @@
 # Changelog
 
-## v1.1.4
-
-<!--Releasenotes start-->
-- Added a workflow to automatically deploy the app to Glitch.
-<!--Releasenotes end-->
-
 ## v1.1.3
 
+<!--Releasenotes start-->
 - The app is now hosted on [Glitch](https://glitch.com/).
+<!--Releasenotes end-->
 
 ## v1.1.2
 
