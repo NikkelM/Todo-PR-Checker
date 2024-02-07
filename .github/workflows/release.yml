@@ -83,7 +83,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          route: POST /repos/{owner}/{repo}/dispatches
-          owner: ${{ github.repository_owner }}
+          route: POST /repos/{repo}/dispatches
           repo: ${{ github.repository }}
           event_type: release_created
