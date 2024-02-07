@@ -16,7 +16,7 @@ require_relative 'version'
 puts "Running Todo PR Checker version: #{VERSION}"
 
 set :bind, '0.0.0.0'
-set :port, '3000'
+set :port, ENV['PORT'] || '3000'
 
 GITHUB_PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV.fetch('GITHUB_PRIVATE_KEY', nil).gsub('\n', "\n"))
 GITHUB_WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
@@ -143,13 +143,13 @@ helpers do
     diff.each_line do |line|
       # This is the most common case, indicating a line was added to the file
       if line.start_with?('+') && !line.start_with?('+++')
-        changes[current_file] << { line: line_number, text: line[1..-1] }
+        changes[current_file] << { line: line_number, text: line[1..] }
       # Lines that start with @@ contain the the starting line and its length for a new block of changes, for the old and new file respectively
       elsif line.start_with?('@@')
         line_number = line.split()[2].split(',')[0].to_i - 1
       # Lines that start with +++ contain the new name of the file, which is the one we want to link to in the comment
       elsif line.start_with?('+++')
-        current_file = line[6..-1].strip
+        current_file = line[6..].strip
         changes[current_file] = []
       end
 
@@ -273,7 +273,8 @@ helpers do
     begin
       @payload = JSON.parse @payload_raw
     rescue JSON::ParserError => e
-      raise "Invalid JSON (#{e}): #{@payload_raw}"
+      logger.debug "Invalid JSON (#{e}): #{@payload_raw}"
+      halt 400
     end
   end
 
