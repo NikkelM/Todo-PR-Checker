@@ -70,7 +70,7 @@ post '/' do
     puts "Initiating check run for action #{@payload['action']} and event #{event_type}"
     initiate_check_run
   end
-
+# TODO: Test comment
   event_handled ? 200 : 204
 end
 
