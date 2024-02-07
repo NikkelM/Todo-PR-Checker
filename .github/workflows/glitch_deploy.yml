@@ -1,8 +1,8 @@
 name: Deploy to Glitch
 
 on:
-  release:
-    types: [released]
+  repository_dispatch:
+    types: [release_created]
 
 jobs:
   GlitchDeploy:
