@@ -7,11 +7,11 @@ on:
 jobs:
   GlitchDeploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Sync to Glitch Project
-        uses: wei/git-sync@v3
-        with:
-          source_repo: https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          source_branch: ${{ github.ref }}
-          destination_repo: ${{ secrets.GLITCH_GIT_URL }}
-          destination_branch: master
+      - uses: lonnen/sync-branch-to-glitch-action@v0.0.3
+        env:
+          GLITCH_GIT_URL: ${{ secrets.GLITCH_GIT_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_BRANCH: ${{ github.event.client_payload.version }}

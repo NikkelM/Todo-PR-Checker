@@ -86,3 +86,4 @@ jobs:
           route: POST /repos/{repo}/dispatches
           repo: ${{ github.repository }}
           event_type: release_created
+          client_payload: '{"version": "v${{ needs.CheckVersion.outputs.newVersion }}"}'
