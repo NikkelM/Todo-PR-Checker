@@ -16,7 +16,7 @@ require_relative 'version'
 puts "Running Todo PR Checker version: #{VERSION}"
 
 set :bind, '0.0.0.0'
-set :port, ENV['PORT'] || '3000'
+set :port, '3000'
 
 GITHUB_PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV.fetch('GITHUB_PRIVATE_KEY', nil).gsub('\n', "\n"))
 GITHUB_WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
@@ -51,7 +51,6 @@ post '/' do
   # If a Pull Request was opened, we want to *create* a new check run (it is not yet executed)
   if event_type == 'pull_request' && @payload['action'] == 'opened'
     event_handled = true
-    puts "Creating check run (pull_request) for action #{@payload['action']} and event #{event_type}"
     create_check_run
   end
 
@@ -59,7 +58,6 @@ post '/' do
   # We only want to create a check if a Pull Request is associated with the event
   if event_type == 'check_suite' && @payload['check_suite']['pull_requests'].first && (@payload['action'] == 'requested' || @payload['action'] == 'rerequested')
     event_handled = true
-    puts "Creating check run (check_suite) for action #{@payload['action']} and event #{event_type}"
     create_check_run
   end
 
@@ -67,7 +65,6 @@ post '/' do
   # We only want to create a check if a Pull Request is associated with the event
   if event_type == 'check_run' && @payload['check_run']['pull_requests'].first && (@payload['action'] == 'created' || @payload['action'] == 'rerequested')
     event_handled = true
-    puts "Initiating check run for action #{@payload['action']} and event #{event_type}"
     initiate_check_run
   end
 
@@ -146,13 +143,13 @@ helpers do
     diff.each_line do |line|
       # This is the most common case, indicating a line was added to the file
       if line.start_with?('+') && !line.start_with?('+++')
-        changes[current_file] << { line: line_number, text: line[1..] }
+        changes[current_file] << { line: line_number, text: line[1..-1] }
       # Lines that start with @@ contain the the starting line and its length for a new block of changes, for the old and new file respectively
       elsif line.start_with?('@@')
         line_number = line.split()[2].split(',')[0].to_i - 1
       # Lines that start with +++ contain the new name of the file, which is the one we want to link to in the comment
       elsif line.start_with?('+++')
-        current_file = line[6..].strip
+        current_file = line[6..-1].strip
         changes[current_file] = []
       end
 

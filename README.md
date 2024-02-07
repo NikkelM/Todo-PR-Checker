@@ -14,7 +14,7 @@ This list will update whenever new changes are pushed, so you always know exactl
 The app supports a wide array of programming languages and action items.
 Should you find that your language of choice or action item is not supported, feel free to open an issue.
 
-The app is built automatically using Google Cloud Build and hosted through Google Cloud Run.
+At the moment, the app is hosted on [Glitch](https://glitch.com/), but is also set up and configured to be built automatically using Google Cloud Build and hosted through Google Cloud Run.
 
 ## In-Depth
 
@@ -31,7 +31,7 @@ Whenever new changes are pushed to the Pull Request, the app will update the com
 
 You can configure the check to block Pull Requests until all action items are resolved by creating a branch protection rule in your repository settings.
 
-Tech stack: The app is built using Ruby and automatically deployed to Google Cloud Run using Google Cloud Build when a new release is created.
+Tech stack: The app is built using Ruby and automatically deployed to Google Cloud Run using Google Cloud Build when a new release is created (*automated deployment has been temporarily paused while the app is hosten on Glitch*).
 
 ## Development
 
