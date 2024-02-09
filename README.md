@@ -14,7 +14,7 @@ This list will update whenever new changes are pushed, so you always know exactl
 The app supports a wide array of programming languages and action items.
 Should you find that your language of choice or action item is not supported out-of-the-box, you can easily configure the app to support it.
 
-To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app will only detect action items if the comment starts in its own line.  <!-- TODO: Is this true? -->
+To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app will only detect action items if the comment starts in its own line.
 The following examples would *not* cause the app to flag the action items:
 
 ```javascript
@@ -60,8 +60,7 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 | `add_languages` | `[string[file_type, line_comment, block_comment_start, block_comment_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['css', null, '/*', '*/'], ['.py', '#']]` | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a `line_comment`, you must set `line_comment` to `null`. If defining `block_comment_start`, `block_comment_end` must also be defined. | `null` |
 
 ## In-Depth
-<!-- This is a todo that should be matched
- -->
+
 On each push to a Pull Request, the app will check all code changes for action item keywords in code comments.
 Currently supported action items are `Todo`, `Fixme` and `Bug`. 
 Capitalization and location of the action item do not matter, as long as it is its own word.
