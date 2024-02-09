@@ -148,10 +148,11 @@ helpers do
   # (3) Retrieves the `.github/config.yml` and parses the app's settings
   def get_app_settings(full_repo_name, head_sha)
     default_settings = {
-      'post_comment' => {
-        'default' => 'items_found',
-        'accepted_values' => %w[items_found always never]
-      }
+      'post_comment' => 'items_found'
+    }
+
+    accepted_setting_values = {
+      'post_comment' => %w[items_found always never]
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
@@ -159,12 +160,12 @@ helpers do
     file_settings = YAML.safe_load(decoded_file)['todo-pr-checker'] || {}
 
     # Merge the default settings with the settings from the file
-    settings = default_settings.transform_values.with_index do |(key, oldval)|
-      newval = file_settings[key]
-      if newval.nil? || !oldval['accepted_values'].include?(newval)
-        oldval['default']
+    settings = default_settings.transform_values do |key, default_value|
+      new_value = file_settings[key]
+      if new_value.nil? || !accepted_setting_values[key].include?(new_value)
+        default_value
       else
-        newval
+        new_value
       end
     end
 
