@@ -159,13 +159,12 @@ helpers do
     file_settings = YAML.safe_load(decoded_file)['todo-pr-checker'] || {}
 
     # Merge the default settings with the settings from the file
-    settings = default_settings.merge(file_settings) do |_, oldval, newval|
-      if newval.nil?
+    settings = default_settings.transform_values do |oldval|
+      newval = file_settings[oldval['default']]
+      if newval.nil? || !oldval['accepted_values'].include?(newval)
         oldval['default']
-      elsif oldval['accepted_values'].include?(newval)
-        newval
       else
-        oldval['default']
+        newval
       end
     end
 
