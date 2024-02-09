@@ -221,7 +221,7 @@ helpers do
       %w[js java ts c cpp cs php swift go kotlin rust dart scala groovy sql css less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
       %w[rb perl] => { line: '#', block_start: '=begin', block_end: '=end' },
       %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
-      %w[r shell gitignore gitattributes gitmodules sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
+      %w[r shell gitignore sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
       %w[haskell lua] => { line: '--', block_start: '{-', block_end: '-}' },
       %w[m tex] => { line: '%', block_start: nil, block_end: nil }
     }

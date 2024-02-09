@@ -57,24 +57,29 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 | `post_comment` | `items_found`, `always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. | `items_found` |
 | `action_items` | `string[]` | A list of action items to look for in code comments. If you set this option, the default values will be overwritten, so you must include them in your list to use them. | `['TODO', 'FIXME', 'BUG']` |
 | `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. | `false` |
-| `add_languages` | `[string[file_type, line_comment, block_comment_start, block_comment_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['css', null, '/*', '*/'], ['.py', '#']]` | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a `line_comment`, you must set `line_comment` to `null`. If defining `block_comment_start`, `block_comment_end` must also be defined. | `null` |
+| `add_languages` | `[string[file_type, line_comment, block_comment_start, block_comment_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['css', null, '/*', '*/'], ['.py', '#']]` | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a `line_comment`, you must set `line_comment` to `null`. If defining `block_comment_start`, `block_comment_end` must also be defined. *The file types shown in the example are already natively supported by the app.* | `null` |
 
-## In-Depth
-
-On each push to a Pull Request, the app will check all code changes for action item keywords in code comments.
-Currently supported action items are `Todo`, `Fixme` and `Bug`. 
-Capitalization and location of the action item do not matter, as long as it is its own word.
-
-The app supports a wide range of programming languages.
-Currently supported languages/file extensions are: _Astro, Bash, C, C#, C++, CSS, Dart, .gitattributes, .gitignore, .gitmodules, Go, Groovy, Haskell, HTML, Java, JavaScript, Kotlin, Less, Lua, Markdown, MATLAB, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Sass, Scala, SCSS, Shell, SQL, Swift, TeX, TypeScript, XML, YAML_
-
-The app will leave a comment on your Pull Request if it finds any unresolved action items.
-Embedded links in the comment lead directly to the lines of code that contain the found action items.
-Whenever new changes are pushed to the Pull Request, the app will update the comment with the latest findings and inform you about your progress.
-
-You can configure the check to block Pull Requests until all action items are resolved by creating a branch protection rule in your repository settings.
-
-Tech stack: The app is built using Ruby and automatically deployed to Google Cloud Run using Google Cloud Build when a new release is created.
+<details>
+<summary>Expand me to see the currently supported file types:</summary>
+<ul>
+  <li><code>.astro</code></li>
+  <li><code>.bash</code></li>
+  <li><code>.c</code>, <code>.cpp</code>, <code>.cs</code>, <code>.css</code></li>
+  <li><code>.dart</code></li>
+  <li><code>.gitignore</code>, <code>.go</code>, <code>.groovy</code></li>
+  <li><code>.haskell</code>, <code>.html</code></li>
+  <li><code>.java</code>, <code>.js</code></li>
+  <li><code>.kotlin</code></li>
+  <li><code>.less</code>, <code>.lua</code></li>
+  <li><code>.m</code>, <code>.md</code></li>
+  <li><code>.perl</code>, <code>.php</code>, <code>.ps1</code>, <code>.py</code></li>
+  <li><code>.r</code>, <code>.rb</code>, <code>.rust</code></li>
+  <li><code>.sass</code>, <code>.scala</code>, <code>.scss</code>, <code>.sh</code>, <code>.shell</code>, <code>.sql</code>, <code>.swift</code></li>
+  <li><code>.tex</code>, <code>.ts</code></li>
+  <li><code>.yaml</code>, <code>.yml</code></li>
+  <li><code>.xml</code></li>
+</ul>
+</details>
 
 ## Development
 
@@ -135,6 +140,6 @@ If your private key is being rejected/fails to parse, replace the line breaks of
 
 ---
 
-This app is automatically built and deployed using Google Cloud Build, and subsequently hosted through Google Cloud Run whenever a new version is released on GitHub, ensuring your installation is always up-to-date.
+This app is developed using Ruby with Sinatra, automatically built and deployed using Google Cloud Build, and subsequently hosted through Google Cloud Run whenever a new version is released on GitHub.
 
 If you enjoy the app and want to say thanks, consider buying me a [coffee](https://ko-fi.com/nikkelm) or [sponsoring](https://github.com/sponsors/NikkelM) this project.
