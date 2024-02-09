@@ -160,16 +160,15 @@ helpers do
     file_settings = YAML.safe_load(decoded_file)['todo-pr-checker'] || {}
 
     # Merge the default settings with the settings from the file
-    settings = default_settings.transform_keys do |key|
+    settings = default_settings.keys.each_with_object({}) do |key, result|
       new_value = file_settings[key]
-      if new_value.nil? || !accepted_setting_values[key].include?(new_value)
-        default_settings[key]
-      else
-        new_value
-      end
+      result[key] = if new_value.nil? || !accepted_setting_values[key].include?(new_value)
+                      default_settings[key]
+                    else
+                      new_value
+                    end
     end
 
-    puts settings
     settings
   rescue Octokit::NotFound
     logger.debug 'No .github/config.yml found'
