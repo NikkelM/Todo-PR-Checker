@@ -3,7 +3,7 @@
 ## v1.2.0
 
 <!--Releasenotes start-->
-- Block comments that end one the same line they start are now correctly identified as such.
+- Block comments that end one the same line they start on are now correctly identified as such.
 - Improved the performance of the app by optimizing the way it looks for action items in the code.
 - The app now supports setting options for the app in a `.github/config.yml` file.
 - Added an option to control when the app should post a comment.
