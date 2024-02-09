@@ -12,7 +12,28 @@ The app checks all code changes in your open Pull Requests for remaining `Todo`,
 This list will update whenever new changes are pushed, so you always know exactly how much work is left.
 
 The app supports a wide array of programming languages and action items.
-Should you find that your language of choice or action item is not supported, feel free to open an issue.
+Should you find that your language of choice or action item is not supported out-of-the-box, you can easily configure the app to support it.
+
+To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app will only detect action items if the comment starts in its own line.  <!-- TODO: Is this true? -->
+The following examples would *not* cause the app to flag the action items:
+
+```javascript
+let variable = true; // TODO: Find a better name for the variable
+
+let otherVar = false; /*
+If the comment does not start on its own line, the TODO action item will not be detected!
+*/
+```
+
+These action items would however be flagged correctly:
+
+```javascript
+// TODO: If a line comment stands on its own, action items will be flagged.
+/*
+Multiline block comments are supported, no matter how many lines they span,
+the TODO will be detected
+*/
+```
 
 ## Options
 
@@ -36,13 +57,15 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 | `post_comment` | `items_found`, `always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. | `items_found` |
 | `action_items` | `string[]` | A list of action items to look for in code comments. If you set this option, the default values will be overwritten, so you must include them in your list to use them. | `['TODO', 'FIXME', 'BUG']` |
 | `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. | `false` |
+| `add_languages` | `[string[file_type, line_comment, block_comment_start, block_comment_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['.py', '/#',]]` | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a `line_comment`, you must set `line_comment` to `null`. If defining `block_comment_start`, `block_comment_end` must also be defined. Note that you must escape the hash character `#` in `.yml` files. | `null` |
 
 ## In-Depth
-
+<!-- This is a todo that should be matched
+ -->
 On each push to a Pull Request, the app will check all code changes for action item keywords in code comments.
 Currently supported action items are `Todo`, `Fixme` and `Bug`. 
 Capitalization and location of the action item do not matter, as long as it is its own word.
-
+TODO shoudn't be matched.
 The app supports a wide range of programming languages.
 Currently supported languages/file extensions are: _Astro, Bash, C, C#, C++, CSS, Dart, .gitattributes, .gitignore, .gitmodules, Go, Groovy, Haskell, HTML, Java, JavaScript, Kotlin, Less, Lua, Markdown, MATLAB, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Sass, Scala, SCSS, Shell, SQL, Swift, TeX, TypeScript, XML, YAML_
 

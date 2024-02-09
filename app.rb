@@ -150,13 +150,15 @@ helpers do
     default_options = {
       'post_comment' => 'items_found',
       'action_items' => %w[todo fixme bug],
-      'case_sensitive' => false
+      'case_sensitive' => false,
+      'add_languages' => []
     }
 
     accepted_option_values = {
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) },
-      'case_sensitive' => ->(value) { [true, false].include?(value) }
+      'case_sensitive' => ->(value) { [true, false].include?(value) },
+      'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) } } }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
@@ -209,6 +211,7 @@ helpers do
   def check_for_todos(changes, options)
     action_items = options['action_items']
     case_sensitive = options['case_sensitive']
+    add_languages = options['add_languages']
 
     todo_changes = {}
     in_block_comment = false
@@ -223,6 +226,31 @@ helpers do
       %w[m tex] => { line: '%', block_start: nil, block_end: nil }
     }
 
+    unwrapped_comment_chars = {}
+    comment_chars.each do |file_types, comment_symbols|
+      file_types.each do |file_type|
+        unwrapped_comment_chars[file_type] = comment_symbols
+      end
+    end
+    puts add_languages
+
+    add_languages.each do |lang|
+      file_type = lang[0].sub(/^\./, '')
+      # The length of lang defines which permutation is given by the user
+      # Users may overwrite the default comment characters for a file type
+      case lang.length
+      when 2
+        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: nil, block_end: nil }
+      when 3
+        unwrapped_comment_chars[file_type] = { line: nil, block_start: lang[1], block_end: lang[2] }
+      when 4
+        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[2], block_end: lang[3] }
+      end
+    end
+
+    comment_chars = unwrapped_comment_chars
+    puts comment_chars
+
     # Changes are grouped by file name
     changes.each do |file, file_changes|
       file_type = File.extname(file).delete('.')
@@ -232,33 +260,31 @@ helpers do
       next unless comment_char
 
       file_todos = []
+      in_block_comment = false
       # Check each line in the file for action items
       file_changes.each do |change|
         text = change[:text].strip
 
         # If the line starts or ends a block comment, set the flag accordingly
         # This flag is used to determine if a following line is part of a block comment or a normal line of code
-        if comment_char[1][:block_start]
-          in_block_comment = true if text.start_with?(comment_char[1][:block_start])
-          in_block_comment = false if text.end_with?(comment_char[1][:block_end])
-        end
+        in_block_comment = true if comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start]) # TODO: Is this caught
 
         # For each of the requested action items, check if they are contained in the line
         action_items.each do |item|
-          # Depending on if the file type supports block comments, use a different regex to match the item
-          regex = if comment_char[1][:block_start]
-                    /(\b#{item}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{item}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{item}\b#{Regexp.escape(comment_char[1][:block_end])})/
-                  else
-                    /(\b#{item}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{item}\b)/
-                  end
+          # Create a regex that matches the item as a standalone word
+          regex = /\b#{item}\b/
+
           # If the user has requested case insensitive matching, modify the regex accordingly
           regex = Regexp.new(regex.source, Regexp::IGNORECASE) unless case_sensitive
 
-          # If the item is contained in the line, add it to the output collection
-          if text.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
+          # If the item is contained in the line and the line is a comment, add it to the output collection
+          if text.match(regex) && (text.start_with?(comment_char[1][:line]) || in_block_comment)
             file_todos << change
+            in_block_comment = false if comment_char[1][:block_start] && text.end_with?(comment_char[1][:block_end])
             break
           end
+
+          in_block_comment = false if comment_char[1][:block_start] && text.end_with?(comment_char[1][:block_end])
         end
       end
 
