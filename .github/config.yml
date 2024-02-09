@@ -1,2 +1,3 @@
 todo-pr-checker:
-  post_comment: 'never'
+  post_comment: 'items_found'
+  action_items: ['TODO', 'FIXME', 'BUG']

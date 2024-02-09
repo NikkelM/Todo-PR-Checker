@@ -99,22 +99,23 @@ helpers do
     # As soon as the run is initiated, mark it as in progress on GitHub
     @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
-    # Get the raw repository content from GitHub, at the Pull Request's HEAD commit
-    app_settings = get_app_settings(full_repo_name, @payload['check_run']['head_sha'])
+    # Get the options for the app from the `.github/config.yml` file in the repository
+    app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
+    logger.debug app_options
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
-    todo_changes = check_for_todos(changes)
+    todo_changes = check_for_todos(changes, app_options['action_items'])
 
     # If the app has previously created a comment on the Pull Request, fetch it
     app_comment = fetch_app_comment(full_repo_name, pull_number)
 
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
-      # If the user has enabled post_comment in the settings
-      if app_settings['post_comment'] != 'never'
+      # If the user has enabled post_comment in the options
+      if app_options['post_comment'] != 'never'
         comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name)
 
         # Post or update the comment with the found action items
@@ -130,7 +131,7 @@ helpers do
     else
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
       # If the app has not previously created a comment, we don't needlessly create one
-      if app_comment || app_settings['post_comment'] == 'always'
+      if app_comment || app_options['post_comment'] == 'always'
         if app_comment
           comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
           @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
@@ -145,37 +146,37 @@ helpers do
     end
   end
 
-  # (3) Retrieves the `.github/config.yml` and parses the app's settings
-  def get_app_settings(full_repo_name, head_sha)
-    default_settings = {
-      'post_comment' => 'items_found'
+  # (3) Retrieves the `.github/config.yml` and parses the app's options
+  def get_app_options(full_repo_name, head_sha)
+    default_options = {
+      'post_comment' => 'items_found',
+      'action_items' => %w[todo fixme bug]
     }
 
-    accepted_setting_values = {
-      'post_comment' => %w[items_found always never]
+    accepted_option_values = {
+      'post_comment' => ->(value) { %w[items_found always never].include?(value) },
+      'action_items' => ->(value) { value.is_a?(Array) }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
     decoded_file = Base64.decode64(file.content)
-    file_settings = YAML.safe_load(decoded_file)['todo-pr-checker'] || {}
+    file_options = YAML.safe_load(decoded_file)['todo-pr-checker'] || {}
 
-    # Merge the default settings with the settings from the file
-    settings = default_settings.keys.each_with_object({}) do |key, result|
-      new_value = file_settings[key]
-      result[key] = if new_value.nil? || !accepted_setting_values[key].include?(new_value)
-                      default_settings[key]
+    # Merge the default options with those from the file
+    default_options.keys.each_with_object({}) do |key, result|
+      new_value = file_options[key]
+      result[key] = if new_value.nil? || !accepted_option_values[key].call(new_value)
+                      default_options[key]
                     else
                       new_value
                     end
     end
-
-    settings
   rescue Octokit::NotFound
     logger.debug 'No .github/config.yml found'
-    default_settings.transform_values { |value| value['default'] }
+    default_options
   end
 
-  # (3) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
+  # (4) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
   def get_pull_request_changes(full_repo_name, pull_number)
     diff = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github.diff')
 
@@ -203,9 +204,8 @@ helpers do
     changes
   end
 
-  # (4) Checks changed lines in supported file types for action items in code comments ("Todos")
-  def check_for_todos(changes)
-    keywords = %w[todo fixme bug]
+  # (5) Checks changed lines in supported file types for action items in code comments ("Todos")
+  def check_for_todos(changes, action_items)
     todo_changes = {}
     in_block_comment = false
 
@@ -239,16 +239,16 @@ helpers do
           in_block_comment = false if text.end_with?(comment_char[1][:block_end])
         end
 
-        # For each of the supported action items ("keywords"), check if they are contained in the line
-        keywords.each do |keyword|
-          # Depending on if the file type supports block comments, use a different regex to match the keyword
+        # For each of the requested action items, check if they are contained in the line
+        action_items.each do |item|
+          # Depending on if the file type supports block comments, use a different regex to match the item
           regex = if comment_char[1][:block_start]
-                    /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{keyword}\b#{Regexp.escape(comment_char[1][:block_end])})/
+                    /(\b#{item}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{item}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{item}\b#{Regexp.escape(comment_char[1][:block_end])})/
                   else
-                    /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b)/
+                    /(\b#{item}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{item}\b)/
                   end
 
-          # If the keyword is contained in the line, add it to the output collection
+          # If the item is contained in the line, add it to the output collection
           if text.downcase.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
             file_todos << change
             break
@@ -263,7 +263,7 @@ helpers do
     todo_changes
   end
 
-  # (5) Creates a comment text from the found action items, with embedded links to the relevant lines
+  # (6) Creates a comment text from the found action items, with embedded links to the relevant lines
   def create_pr_comment_from_changes(todo_changes, full_repo_name)
     number_of_todos = todo_changes.values.flatten.count
     comment_body = if number_of_todos == 1
@@ -299,7 +299,7 @@ helpers do
     comment_body
   end
 
-  # (6) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
+  # (7) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
   def fetch_app_comment(full_repo_name, pull_number)
     comments = @installation_client.issue_comments(full_repo_name, pull_number, accept: 'application/vnd.github+json')
 

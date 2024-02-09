@@ -14,24 +14,27 @@ This list will update whenever new changes are pushed, so you always know exactl
 The app supports a wide array of programming languages and action items.
 Should you find that your language of choice or action item is not supported, feel free to open an issue.
 
-## Settings
+## Options
 
-This app supports the `.github/config.yml` file to configure settings.
+This app supports the `.github/config.yml` file to configure options.
 You can use this file to support additional programming languages, action items, and more.
 
-To configure settings, add a `todo-pr-checker` key at the top-level of your `.github/config.yml` file:
+To configure options, add a `todo-pr-checker` key at the top-level of your `.github/config.yml` file:
 
 ```yaml
 todo-pr-checker:
   post_comment: true
 ```
 
-### Available settings
+To get started, you can copy the `.github/config.yml` file from this repository and adjust it to your needs.
 
-<!-- TODO: After the functionality is added, add following part to post_comment description: ...and a breakdown of action items can be found in the check summary. -->
-| Setting | Possible Values | Description |
-| --- | --- | --- |
-| `post_comment` | *Default*: `items_found`,<br>`always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. |
+### Available options
+
+<!-- SHOULD: After the functionality is added, add following part to post_comment description: ...and a breakdown of action items can be found in the check summary. -->
+| Option | Possible Values | Description | Default |
+| --- | --- | --- | --- |
+| `post_comment` | `items_found`, `always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. | `items_found` |
+| `action_items` | `string[]` | A list of action items to look for in code comments. If you set this option, the default values will be overwritten, so you must include them in your list to use them. | `['TODO', 'FIXME', 'BUG']` |
 
 ## In-Depth
 
