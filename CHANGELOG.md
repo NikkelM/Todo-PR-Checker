@@ -3,9 +3,12 @@
 ## v1.2.0
 
 <!--Releasenotes start-->
-- The app now supports setting options in the `.github/config.yml` file. See the Readme for available options and how to use the file.
-- Added an option to control when the app posts a comment.
+- Block comments that end one the same line they start are now correctly identified as such.
+- Improved the performance of the app by optimizing the way it looks for action items in the code.
+- The app now supports setting options for the app in a `.github/config.yml` file.
+- Added an option to control when the app should post a comment.
 - Added an option to control which action items the app should look for.
+- Added an option to add support for additional programming languages.
 - Added an option to control whether the app should look for action items in a case-sensitive manner.
 <!--Releasenotes end-->
 
