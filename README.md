@@ -28,10 +28,10 @@ todo-pr-checker:
 
 ### Available settings
 
-| Setting | Type | Description | Default |
-| --- | --- | --- | --- |
-<!-- TODO: Test comment -->
-| `post_comment` | Boolean | Whether to post a comment on the Pull Request if any open action items are found. If disabled, the check will fail without additional feedback. | `true` |
+<!-- TODO: After the functionality is added, add following part to post_comment description: ...and a breakdown of action items can be found in the check summary. -->
+| Setting | Possible Values | Description |
+| --- | --- | --- |
+| `post_comment` | *Default*: `items_found`,<br>`always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. |
 
 ## In-Depth
 

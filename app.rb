@@ -114,7 +114,7 @@ helpers do
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
       # If the user has enabled post_comment in the settings
-      if app_settings['post_comment']
+      if app_settings['post_comment'] != 'never'
         comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name)
 
         # Post or update the comment with the found action items
@@ -130,9 +130,13 @@ helpers do
     else
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
       # If the app has not previously created a comment, we don't needlessly create one
-      if app_comment
+      if app_comment || app_settings['post_comment'] == 'always'
         comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
-        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
+        if app_comment
+          @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
+        else
+          @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
+        end
       end
 
       # Mark the check run as successful, as no action items were found
@@ -143,20 +147,22 @@ helpers do
   # (3) Retrieves the `.github/config.yml` and parses the app's settings
   def get_app_settings(full_repo_name, head_sha)
     default_settings = {
-      'post_comment' => true
+      'post_comment' => {
+        'default' => 'items_found',
+        'accepted_values' => %w[items_found always never]
+      }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
     decoded_file = Base64.decode64(file.content)
-    puts decoded_file
     file_settings = YAML.safe_load(decoded_file)['todo-pr-checker']
 
     # Merge the default settings with the settings from the file
     settings = default_settings.merge(file_settings) do |_, oldval, newval|
-      if [TrueClass, FalseClass].include?(oldval.class) && [TrueClass, FalseClass].include?(newval.class)
+      if oldval['accepted_values'].include?(newval)
         newval
       else
-        oldval.instance_of?(newval.class) ? newval : oldval
+        oldval['default']
       end
     end
 
@@ -164,7 +170,7 @@ helpers do
     settings
   rescue Octokit::NotFound
     logger.debug 'No .github/config.yml found'
-    default_settings
+    default_settings.transform_values { |value| value['default'] }
   end
 
   # (3) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app

@@ -1,2 +1,2 @@
 todo-pr-checker:
-  post_comment: true
+  post_comment: `items_found`
