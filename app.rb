@@ -100,7 +100,7 @@ helpers do
     @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
     # Get the raw repository content from GitHub, at the Pull Request's HEAD commit
-    settings = get_app_settings(full_repo_name, @payload['check_run']['head_sha'])
+    app_settings = get_app_settings(full_repo_name, @payload['check_run']['head_sha'])
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
@@ -113,13 +113,16 @@ helpers do
 
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
-      comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name)
+      # If the user has enabled post_comment in the settings
+      if app_settings['post_comment']
+        comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name)
 
-      # Post or update the comment with the found action items
-      if app_comment
-        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
-      else
-        @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
+        # Post or update the comment with the found action items
+        if app_comment
+          @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
+        else
+          @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
+        end
       end
 
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
@@ -139,17 +142,24 @@ helpers do
 
   # (3) Retrieves the `.github/config.yml` and parses the app's settings
   def get_app_settings(full_repo_name, head_sha)
-    begin
-      file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
-      file = Base64.decode64(file.content)
-      # Get the settings from the file, the top-level key is todo-pr-checker
-      settings = YAML.safe_load(file)['todo-pr-checker']
-      puts settings
-      settings
-    rescue Octokit::NotFound
-      logger.debug 'No .github/config.yml found'
-      nil
+    default_settings = {
+      'post_comment' => true
+    }
+
+    file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
+    decoded_file = Base64.decode64(file.content)
+    file_settings = YAML.safe_load(decoded_file)['todo-pr-checker']
+
+    # Merge the default settings with the settings from the file
+    settings = default_settings.merge(file_settings) do |_, oldval, newval|
+      oldval.instance_of?(newval.class) ? newval : oldval
     end
+
+    puts settings
+    settings
+  rescue Octokit::NotFound
+    logger.debug 'No .github/config.yml found'
+    default_settings
   end
 
   # (3) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app

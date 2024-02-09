@@ -14,7 +14,23 @@ This list will update whenever new changes are pushed, so you always know exactl
 The app supports a wide array of programming languages and action items.
 Should you find that your language of choice or action item is not supported, feel free to open an issue.
 
-Whenever a new version is released, the app is automatically built and deployed using Google Cloud Build, and subsequently hosted through Google Cloud Run.
+## Settings
+
+This app supports the `.github/config.yml` file to configure settings.
+You can use this file to support additional programming languages, action items, and more.
+
+To configure settings, add a `todo-pr-checker` key at the top-level of your `.github/config.yml` file:
+
+```yaml
+todo-pr-checker:
+  post_comment: true
+```
+
+### Available settings
+
+| Setting | Type | Description | Default |
+| --- | --- | --- | --- |
+| `post_comment` | Boolean | Whether to post a comment on the Pull Request if any open action items are found. If disabled, the check will fail without additional feedback. | `true` |
 
 ## In-Depth
 
@@ -92,4 +108,6 @@ If your private key is being rejected/fails to parse, replace the line breaks of
 
 ---
 
-If you enjoy this app and want to say thanks, consider buying me a [coffee](https://ko-fi.com/nikkelm) or [sponsoring](https://github.com/sponsors/NikkelM) this project.
+This app is automatically built and deployed using Google Cloud Build, and subsequently hosted through Google Cloud Run whenever a new version is released on GitHub, ensuring your installation is always up-to-date.
+
+If you enjoy the app and want to say thanks, consider buying me a [coffee](https://ko-fi.com/nikkelm) or [sponsoring](https://github.com/sponsors/NikkelM) this project.
