@@ -57,7 +57,6 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 
 ### Available options
 
-<!-- TODO: After the functionality is added, add following part to post_comment description: If set to `never`, the check will still fail and a breakdown of action items can be found in the check summary. -->
 | Option | Possible Values | Description | Default |
 | --- | --- | --- | --- |
 | `post_comment` | `items_found`, `always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. | `items_found` |

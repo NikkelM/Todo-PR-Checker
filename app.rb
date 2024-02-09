@@ -175,7 +175,7 @@ helpers do
                     end
     end
   rescue Octokit::NotFound
-    logger.debug 'No .github/config.yml found'
+    logger.debug 'No .github/config.yml found, or options validation failed. Using default options.'
     default_options
   end
 
@@ -270,7 +270,7 @@ helpers do
         text = line[:text].strip
 
         # Set the flag if the line starts a block comment
-        in_block_comment = true if comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start]) # TODO: Is this caught
+        in_block_comment = true if comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
 
         # If the line is a comment and contains any action item, add it to the output collection
         file_todos << line if (text.start_with?(comment_char[1][:line]) || in_block_comment) && regexes.any? { |regex| text.match(regex) }
