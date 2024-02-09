@@ -1,4 +1,4 @@
 todo-pr-checker:
   post_comment: 'items_found'
-  action_items: ['Todo', 'FIXME', 'BUG']
+  action_items: ['todo', 'FIXME', 'BUG']
   case_sensitive: true
