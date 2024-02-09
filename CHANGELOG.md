@@ -8,7 +8,7 @@
 - The app now supports setting options for the app in a `.github/config.yml` file.
 - Added an option to control when the app should post a comment.
 - Added an option to control which action items the app should look for.
-- Added an option to add support for additional programming languages.
+- Added an option to add support for additional languages/file types.
 - Added an option to control whether the app should look for action items in a case-sensitive manner.
 <!--Releasenotes end-->
 
