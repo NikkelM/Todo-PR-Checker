@@ -160,7 +160,9 @@ helpers do
 
     # Merge the default settings with the settings from the file
     settings = default_settings.merge(file_settings) do |_, oldval, newval|
-      if oldval['accepted_values'].include?(newval)
+      if newval.nil?
+        oldval['default']
+      elsif oldval['accepted_values'].include?(newval)
         newval
       else
         oldval['default']
