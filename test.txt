@@ -1,3 +1,0 @@
-# Comments in txt
-
-/* TODO is caught by the parser, but not by the lexer */

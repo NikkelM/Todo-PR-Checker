@@ -1,7 +1,8 @@
 todo-pr-checker:
   post_comment: 'items_found'
   add_languages: [
-    ['.txt', '#', '/*', '*/']
+    ['js', '//', '/*', '*,'],
+    ['.py', '/#']
   ]
   action_items: ['TODO', 'FIXME', 'BUG']
   case_sensitive: false

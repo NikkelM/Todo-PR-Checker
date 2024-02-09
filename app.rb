@@ -232,7 +232,6 @@ helpers do
         unwrapped_comment_chars[file_type] = comment_symbols
       end
     end
-    puts add_languages
 
     add_languages.each do |lang|
       file_type = lang[0].sub(/^\./, '')
@@ -249,7 +248,6 @@ helpers do
     end
 
     comment_chars = unwrapped_comment_chars
-    puts comment_chars
 
     # Changes are grouped by file name
     changes.each do |file, file_changes|
