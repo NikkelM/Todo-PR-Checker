@@ -156,7 +156,7 @@ helpers do
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
     decoded_file = Base64.decode64(file.content)
-    file_settings = YAML.safe_load(decoded_file)['todo-pr-checker']
+    file_settings = YAML.safe_load(decoded_file)['todo-pr-checker'] || {}
 
     # Merge the default settings with the settings from the file
     settings = default_settings.merge(file_settings) do |_, oldval, newval|
