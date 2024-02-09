@@ -107,7 +107,7 @@ helpers do
     changes = get_pull_request_changes(full_repo_name, pull_number)
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
-    todo_changes = check_for_todos(changes, app_options['action_items'])
+    todo_changes = check_for_todos(changes, app_options)
 
     # If the app has previously created a comment on the Pull Request, fetch it
     app_comment = fetch_app_comment(full_repo_name, pull_number)
@@ -150,12 +150,14 @@ helpers do
   def get_app_options(full_repo_name, head_sha)
     default_options = {
       'post_comment' => 'items_found',
-      'action_items' => %w[todo fixme bug]
+      'action_items' => %w[todo fixme bug],
+      'case_sensitive' => false
     }
 
     accepted_option_values = {
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
-      'action_items' => ->(value) { value.is_a?(Array) }
+      'action_items' => ->(value) { value.is_a?(Array) },
+      'case_sensitive' => ->(value) { [true, false].include?(value) }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
@@ -205,7 +207,10 @@ helpers do
   end
 
   # (5) Checks changed lines in supported file types for action items in code comments ("Todos")
-  def check_for_todos(changes, action_items)
+  def check_for_todos(changes, options)
+    action_items = options['action_items']
+    case_sensitive = options['case_sensitive']
+
     todo_changes = {}
     in_block_comment = false
 
@@ -247,9 +252,11 @@ helpers do
                   else
                     /(\b#{item}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{item}\b)/
                   end
+          # If the user has requested case insensitive matching, modify the regex accordingly
+          regex = Regexp.new(regex.source, Regexp::IGNORECASE) unless case_sensitive
 
           # If the item is contained in the line, add it to the output collection
-          if text.downcase.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
+          if text.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
             file_todos << change
             break
           end
