@@ -1,16 +1,18 @@
 # frozen_string_literal: true
 
-require 'sinatra'
-require 'octokit'
+require 'base64'
 require 'dotenv/load'
-require 'json'
-require 'openssl'
-require 'jwt'
-require 'time'
-require 'logger'
 require 'git'
+require 'json'
+require 'jwt'
+require 'logger'
 require 'net/http'
+require 'octokit'
+require 'openssl'
+require 'sinatra'
+require 'time'
 require 'uri'
+require 'yaml'
 require_relative 'version'
 
 puts "Running Todo PR Checker version: #{VERSION}"
@@ -97,24 +99,30 @@ helpers do
     # As soon as the run is initiated, mark it as in progress on GitHub
     @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
+    # Get the options for the app from the `.github/config.yml` file in the repository
+    app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
+
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
-    todo_changes = check_for_todos(changes)
+    todo_changes = check_for_todos(changes, app_options)
 
     # If the app has previously created a comment on the Pull Request, fetch it
     app_comment = fetch_app_comment(full_repo_name, pull_number)
 
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
-      comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name)
+      # If the user has enabled post_comment in the options
+      if app_options['post_comment'] != 'never'
+        comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name)
 
-      # Post or update the comment with the found action items
-      if app_comment
-        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
-      else
-        @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
+        # Post or update the comment with the found action items
+        if app_comment
+          @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
+        else
+          @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
+        end
       end
 
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
@@ -122,9 +130,14 @@ helpers do
     else
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
       # If the app has not previously created a comment, we don't needlessly create one
-      if app_comment
-        comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
-        @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
+      if app_comment || app_options['post_comment'] == 'always'
+        if app_comment
+          comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
+          @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
+        else
+          comment_body = "✔ No action items found!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
+          @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
+        end
       end
 
       # Mark the check run as successful, as no action items were found
@@ -132,7 +145,41 @@ helpers do
     end
   end
 
-  # (3) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
+  # (3) Retrieves the `.github/config.yml` and parses the app's options
+  def get_app_options(full_repo_name, head_sha)
+    default_options = {
+      'post_comment' => 'items_found',
+      'action_items' => %w[todo fixme bug],
+      'case_sensitive' => false,
+      'add_languages' => []
+    }
+
+    accepted_option_values = {
+      'post_comment' => ->(value) { %w[items_found always never].include?(value) },
+      'action_items' => ->(value) { value.is_a?(Array) },
+      'case_sensitive' => ->(value) { [true, false].include?(value) },
+      'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) } } }
+    }
+
+    file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
+    decoded_file = Base64.decode64(file.content)
+    file_options = YAML.safe_load(decoded_file)['todo-pr-checker'] || {}
+
+    # Merge the default options with those from the file
+    default_options.keys.each_with_object({}) do |key, result|
+      new_value = file_options[key]
+      result[key] = if new_value.nil? || !accepted_option_values[key].call(new_value)
+                      default_options[key]
+                    else
+                      new_value
+                    end
+    end
+  rescue Octokit::NotFound
+    logger.debug 'No .github/config.yml found, or options validation failed. Using default options.'
+    default_options
+  end
+
+  # (4) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
   def get_pull_request_changes(full_repo_name, pull_number)
     diff = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github.diff')
 
@@ -160,21 +207,53 @@ helpers do
     changes
   end
 
-  # (4) Checks changed lines in supported file types for action items in code comments ("Todos")
-  def check_for_todos(changes)
-    keywords = %w[todo fixme bug]
+  # (5) Checks changed lines in supported file types for action items in code comments ("Todos")
+  def check_for_todos(changes, options)
+    action_items = options['action_items']
+    case_sensitive = options['case_sensitive']
+    add_languages = options['add_languages']
+
     todo_changes = {}
     in_block_comment = false
 
     comment_chars = {
       %w[md html astro xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
-      %w[js java ts c cpp cs php swift go kotlin rust dart scala css less sass scss groovy sql] => { line: '//', block_start: '/*', block_end: '*/' },
+      %w[js java ts c cpp cs php swift go kotlin rust dart scala groovy sql css less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
       %w[rb perl] => { line: '#', block_start: '=begin', block_end: '=end' },
       %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
-      %w[r shell gitignore gitattributes gitmodules sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
+      %w[r shell gitignore sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
       %w[haskell lua] => { line: '--', block_start: '{-', block_end: '-}' },
       %w[m tex] => { line: '%', block_start: nil, block_end: nil }
     }
+
+    unwrapped_comment_chars = {}
+    comment_chars.each do |file_types, comment_symbols|
+      file_types.each do |file_type|
+        unwrapped_comment_chars[file_type] = comment_symbols
+      end
+    end
+
+    add_languages.each do |lang|
+      file_type = lang[0].sub(/^\./, '')
+      # The length of lang defines which permutation is given by the user
+      # Users may overwrite the default comment characters for a file type
+      case lang.length
+      when 2
+        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: nil, block_end: nil }
+      when 3
+        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[1], block_end: lang[2] }
+      when 4
+        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[2], block_end: lang[3] }
+      end
+    end
+
+    comment_chars = unwrapped_comment_chars
+
+    # Create a regex for each action item
+    regexes = action_items.map do |item|
+      regex = /\b#{item}\b/
+      case_sensitive ? regex : Regexp.new(regex.source, Regexp::IGNORECASE)
+    end
 
     # Changes are grouped by file name
     changes.each do |file, file_changes|
@@ -185,32 +264,19 @@ helpers do
       next unless comment_char
 
       file_todos = []
+      in_block_comment = false
       # Check each line in the file for action items
-      file_changes.each do |change|
-        text = change[:text].strip
+      file_changes.each do |line|
+        text = line[:text].strip
 
-        # If the line starts or ends a block comment, set the flag accordingly
-        # This flag is used to determine if a following line is part of a block comment or a normal line of code
-        if comment_char[1][:block_start]
-          in_block_comment = true if text.start_with?(comment_char[1][:block_start])
-          in_block_comment = false if text.end_with?(comment_char[1][:block_end])
-        end
+        # Set the flag if the line starts a block comment
+        in_block_comment = true if comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
 
-        # For each of the supported action items ("keywords"), check if they are contained in the line
-        keywords.each do |keyword|
-          # Depending on if the file type supports block comments, use a different regex to match the keyword
-          regex = if comment_char[1][:block_start]
-                    /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b|#{Regexp.escape(comment_char[1][:block_start])}\s*#{keyword}\b#{Regexp.escape(comment_char[1][:block_end])})/
-                  else
-                    /(\b#{keyword}\b|#{Regexp.escape(comment_char[1][:line])}\s*#{keyword}\b)/
-                  end
+        # If the line is a comment and contains any action item, add it to the output collection
+        file_todos << line if (text.start_with?(comment_char[1][:line]) || in_block_comment) && regexes.any? { |regex| text.match(regex) }
 
-          # If the keyword is contained in the line, add it to the output collection
-          if text.downcase.match(regex) && (in_block_comment || text.start_with?(comment_char[1][:line]))
-            file_todos << change
-            break
-          end
-        end
+        # Reset the flag if the line ends a block comment
+        in_block_comment = false if comment_char[1][:block_start] && text.end_with?(comment_char[1][:block_end])
       end
 
       # We don't want to add files to the output collection if they don't contain any action items, as they shouldn't be posted in the comment
@@ -220,7 +286,7 @@ helpers do
     todo_changes
   end
 
-  # (5) Creates a comment text from the found action items, with embedded links to the relevant lines
+  # (6) Creates a comment text from the found action items, with embedded links to the relevant lines
   def create_pr_comment_from_changes(todo_changes, full_repo_name)
     number_of_todos = todo_changes.values.flatten.count
     comment_body = if number_of_todos == 1
@@ -256,7 +322,7 @@ helpers do
     comment_body
   end
 
-  # (6) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
+  # (7) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
   def fetch_app_comment(full_repo_name, pull_number)
     comments = @installation_client.issue_comments(full_repo_name, pull_number, accept: 'application/vnd.github+json')
 

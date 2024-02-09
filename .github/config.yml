@@ -1,0 +1,14 @@
+todo-pr-checker:
+  # When should comments be posted? 
+  post_comment: 'items_found'
+  # What action items should be looked for (will overwrite default values)
+  action_items: ['TODO', 'FIXME', 'BUG']
+  # Languages/file types to add. At least either the line comment or both block comment definitions are required.
+  # If there are no line comments in the language, set the value to null.
+  add_languages: [
+    ['js', '//', '/*', '*,'],
+    ['css', null, '/*', '*/'],
+    ['.py', '#']
+  ]
+  # Whether or not searching for action items should be case sensitive
+  case_sensitive: false

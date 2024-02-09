@@ -1,10 +1,20 @@
 # Changelog
 
-## v1.1.3
+## v1.2.0
 
 <!--Releasenotes start-->
-- Replaced an exception with a 400 status code when the app receives a webhook event with en empty payload.
+- Block comments that end one the same line they start on are now correctly identified as such.
+- Improved the performance of the app by optimizing the way it looks for action items in the code.
+- The app now supports setting options for the app in a `.github/config.yml` file.
+- Added an option to control when the app should post a comment.
+- Added an option to control which action items the app should look for.
+- Added an option to add support for additional languages/file types.
+- Added an option to control whether the app should look for action items in a case-sensitive manner.
 <!--Releasenotes end-->
+
+## v1.1.3
+
+- Replaced an exception with a 400 status code when the app receives a webhook event with en empty payload.
 
 ## v1.1.2
 

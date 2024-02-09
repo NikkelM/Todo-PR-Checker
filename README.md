@@ -1,8 +1,14 @@
 <h1 align="center">Todo PR Checker</h1>
 
 <p align="center">
-  <img src="./development/images/icon/images/icon.png" width="150" alt="Todo PR Checker">
+  <a href="https://github.com/marketplace/todo-pr-checker">
+    <img src="./development/images/icon/images/icon.png" width="150" alt="Todo PR Checker">
+  </a>
+  </br>
+  <i>Get the app on the <a href="https://github.com/marketplace/todo-pr-checker">GitHub Marketplace</a></i>
 </p>
+
+
 
 Do you keep forgetting to resolve that one `// TODO:...` or fix the last ` # Bug...` before merging your Pull Requests?
 
@@ -12,26 +18,73 @@ The app checks all code changes in your open Pull Requests for remaining `Todo`,
 This list will update whenever new changes are pushed, so you always know exactly how much work is left.
 
 The app supports a wide array of programming languages and action items.
-Should you find that your language of choice or action item is not supported, feel free to open an issue.
+Should you find that your language of choice or action item is not supported out-of-the-box, you can easily configure the app to support it.
 
-Whenever a new version is released, the app is automatically built and deployed using Google Cloud Build, and subsequently hosted through Google Cloud Run.
+To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app will only detect action items if the comment starts in its own line.
+The following examples would *not* cause the app to flag the action items:
 
-## In-Depth
+```javascript
+let variable = true; // TODO: Find a better name for the variable
 
-On each push to a Pull Request, the app will check all code changes for action item keywords in code comments.
-Currently supported action items are `Todo`, `Fixme` and `Bug`. 
-Capitalization and location of the action item do not matter, as long as it is its own word.
+let otherVar = false; /*
+If the comment does not start on its own line, the TODO action item will not be detected!
+*/
+```
 
-The app supports a wide range of programming languages.
-Currently supported languages/file extensions are: _Astro, Bash, C, C#, C++, CSS, Dart, .gitattributes, .gitignore, .gitmodules, Go, Groovy, Haskell, HTML, Java, JavaScript, Kotlin, Less, Lua, Markdown, MATLAB, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Sass, Scala, SCSS, Shell, SQL, Swift, TeX, TypeScript, XML, YAML_
+These action items would however be flagged correctly:
 
-The app will leave a comment on your Pull Request if it finds any unresolved action items.
-Embedded links in the comment lead directly to the lines of code that contain the found action items.
-Whenever new changes are pushed to the Pull Request, the app will update the comment with the latest findings and inform you about your progress.
+```javascript
+// TODO: If a line comment stands on its own, action items will be flagged.
+/*
+Multiline block comments are supported, no matter how many lines they span,
+the TODO will be detected
+*/
+```
 
-You can configure the check to block Pull Requests until all action items are resolved by creating a branch protection rule in your repository settings.
+## Options
 
-Tech stack: The app is built using Ruby and automatically deployed to Google Cloud Run using Google Cloud Build when a new release is created.
+This app supports the `.github/config.yml` file to configure options.
+You can use this file to support additional programming languages, action items, and more.
+
+To configure options, add a `todo-pr-checker` key at the top-level of your `.github/config.yml` file:
+
+```yaml
+todo-pr-checker:
+  post_comment: true
+```
+
+To get started, you can copy the `.github/config.yml` file from this repository and adjust it to your needs.
+
+### Available options
+
+| Option | Possible Values | Description | Default |
+| --- | --- | --- | --- |
+| `post_comment` | `items_found`, `always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. | `items_found` |
+| `action_items` | `string[]` | A list of action items to look for in code comments. If you set this option, the default values will be overwritten, so you must include them in your list to use them. | `['TODO', 'FIXME', 'BUG']` |
+| `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. | `false` |
+| `add_languages` | `[string[file_type, line_comment, block_comment_start, block_comment_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['css', null, '/*', '*/'], ['.py', '#']]` | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a `line_comment`, you must set `line_comment` to `null`. If defining `block_comment_start`, `block_comment_end` must also be defined. *The file types shown in the example are already natively supported by the app.* | `null` |
+
+<details>
+<summary>Expand me to see the currently supported file types:</summary>
+<ul>
+  <li><code>.astro</code></li>
+  <li><code>.bash</code></li>
+  <li><code>.c</code>, <code>.cpp</code>, <code>.cs</code>, <code>.css</code></li>
+  <li><code>.dart</code></li>
+  <li><code>.gitignore</code>, <code>.go</code>, <code>.groovy</code></li>
+  <li><code>.haskell</code>, <code>.html</code></li>
+  <li><code>.java</code>, <code>.js</code></li>
+  <li><code>.kotlin</code></li>
+  <li><code>.less</code>, <code>.lua</code></li>
+  <li><code>.m</code>, <code>.md</code></li>
+  <li><code>.perl</code>, <code>.php</code>, <code>.ps1</code>, <code>.py</code></li>
+  <li><code>.r</code>, <code>.rb</code>, <code>.rust</code></li>
+  <li><code>.sass</code>, <code>.scala</code>, <code>.scss</code>, <code>.sh</code>, <code>.shell</code>, <code>.sql</code>, <code>.swift</code></li>
+  <li><code>.tex</code>, <code>.ts</code></li>
+  <li><code>.yaml</code>, <code>.yml</code></li>
+  <li><code>.xml</code></li>
+</ul>
+</details>
 
 ## Development
 
@@ -54,7 +107,7 @@ APP_FRIENDLY_NAME=${Name of the CI check}
 
 The documentation linked above describes where to obtain these values.
 
-You can then use [smee](https://smee.io/) to create a webhook that will forward the webhook events to your local app:
+You can then use [smee](https://smee.io/) to forward the webhook events sent by GitHub to your local app, like this:
 
 ```bash
 smee --url https://smee.io/gsPiE7FUxg0q3TPz --path / --port 3000
@@ -92,4 +145,6 @@ If your private key is being rejected/fails to parse, replace the line breaks of
 
 ---
 
-If you enjoy this app and want to say thanks, consider buying me a [coffee](https://ko-fi.com/nikkelm) or [sponsoring](https://github.com/sponsors/NikkelM) this project.
+This app is developed using Ruby with Sinatra, automatically built and deployed using Google Cloud Build, and subsequently hosted through Google Cloud Run whenever a new version is released on GitHub.
+
+If you enjoy the app and want to say thanks, consider buying me a [coffee](https://ko-fi.com/nikkelm) or [sponsoring](https://github.com/sponsors/NikkelM) this project.
