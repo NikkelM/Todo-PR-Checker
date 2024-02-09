@@ -65,7 +65,7 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 On each push to a Pull Request, the app will check all code changes for action item keywords in code comments.
 Currently supported action items are `Todo`, `Fixme` and `Bug`. 
 Capitalization and location of the action item do not matter, as long as it is its own word.
-TODO shoudn't be matched.
+
 The app supports a wide range of programming languages.
 Currently supported languages/file extensions are: _Astro, Bash, C, C#, C++, CSS, Dart, .gitattributes, .gitignore, .gitmodules, Go, Groovy, Haskell, HTML, Java, JavaScript, Kotlin, Less, Lua, Markdown, MATLAB, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Sass, Scala, SCSS, Shell, SQL, Swift, TeX, TypeScript, XML, YAML_
 

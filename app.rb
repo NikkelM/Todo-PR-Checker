@@ -218,7 +218,7 @@ helpers do
 
     comment_chars = {
       %w[md html astro xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
-      %w[js java ts c cpp cs php swift go kotlin rust dart scala css less sass scss groovy sql] => { line: '//', block_start: '/*', block_end: '*/' },
+      %w[js java ts c cpp cs php swift go kotlin rust dart scala groovy sql css less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
       %w[rb perl] => { line: '#', block_start: '=begin', block_end: '=end' },
       %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
       %w[r shell gitignore gitattributes gitmodules sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
@@ -241,13 +241,19 @@ helpers do
       when 2
         unwrapped_comment_chars[file_type] = { line: lang[1], block_start: nil, block_end: nil }
       when 3
-        unwrapped_comment_chars[file_type] = { line: nil, block_start: lang[1], block_end: lang[2] }
+        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[1], block_end: lang[2] }
       when 4
         unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[2], block_end: lang[3] }
       end
     end
 
     comment_chars = unwrapped_comment_chars
+
+    # Create a regex for each action item
+    regexes = action_items.map do |item|
+      regex = /\b#{item}\b/
+      case_sensitive ? regex : Regexp.new(regex.source, Regexp::IGNORECASE)
+    end
 
     # Changes are grouped by file name
     changes.each do |file, file_changes|
@@ -260,30 +266,17 @@ helpers do
       file_todos = []
       in_block_comment = false
       # Check each line in the file for action items
-      file_changes.each do |change|
-        text = change[:text].strip
+      file_changes.each do |line|
+        text = line[:text].strip
 
-        # If the line starts or ends a block comment, set the flag accordingly
-        # This flag is used to determine if a following line is part of a block comment or a normal line of code
+        # Set the flag if the line starts a block comment
         in_block_comment = true if comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start]) # TODO: Is this caught
 
-        # For each of the requested action items, check if they are contained in the line
-        action_items.each do |item|
-          # Create a regex that matches the item as a standalone word
-          regex = /\b#{item}\b/
+        # If the line is a comment and contains any action item, add it to the output collection
+        file_todos << line if (text.start_with?(comment_char[1][:line]) || in_block_comment) && regexes.any? { |regex| text.match(regex) }
 
-          # If the user has requested case insensitive matching, modify the regex accordingly
-          regex = Regexp.new(regex.source, Regexp::IGNORECASE) unless case_sensitive
-
-          # If the item is contained in the line and the line is a comment, add it to the output collection
-          if text.match(regex) && (text.start_with?(comment_char[1][:line]) || in_block_comment)
-            file_todos << change
-            in_block_comment = false if comment_char[1][:block_start] && text.end_with?(comment_char[1][:block_end])
-            break
-          end
-
-          in_block_comment = false if comment_char[1][:block_start] && text.end_with?(comment_char[1][:block_end])
-        end
+        # Reset the flag if the line ends a block comment
+        in_block_comment = false if comment_char[1][:block_start] && text.end_with?(comment_char[1][:block_end])
       end
 
       # We don't want to add files to the output collection if they don't contain any action items, as they shouldn't be posted in the comment
