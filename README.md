@@ -30,13 +30,13 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 
 ### Available options
 
-<!-- TODO: After the functionality is added, add following part to post_comment description: ...and a breakdown of action items can be found in the check summary. -->
+<!-- TODO: After the functionality is added, add following part to post_comment description: If set to `never`, the check will still fail and a breakdown of action items can be found in the check summary. -->
 | Option | Possible Values | Description | Default |
 | --- | --- | --- | --- |
 | `post_comment` | `items_found`, `always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. | `items_found` |
 | `action_items` | `string[]` | A list of action items to look for in code comments. If you set this option, the default values will be overwritten, so you must include them in your list to use them. | `['TODO', 'FIXME', 'BUG']` |
-| `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. If set to true, the case must be an exact match. | `false` |
-<!-- todo test -->
+| `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. | `false` |
+
 ## In-Depth
 
 On each push to a Pull Request, the app will check all code changes for action item keywords in code comments.
