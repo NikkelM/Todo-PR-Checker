@@ -97,6 +97,9 @@ helpers do
     # As soon as the run is initiated, mark it as in progress on GitHub
     @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
+    # Get the raw repository content from GitHub, at the Pull Request's HEAD commit
+    repository_content = get_repository_content(full_repo_name, @payload['check_run']['head_sha'])
+
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
 
@@ -130,6 +133,19 @@ helpers do
       # Mark the check run as successful, as no action items were found
       @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success', accept: 'application/vnd.github+json')
     end
+  end
+
+  # (3) Retrieves the raw content of the repository at the HEAD commit of the Pull Request
+  def get_repository_content(full_repo_name, head_sha)
+    repository_content = {}
+    @installation_client.contents(full_repo_name, ref: head_sha).each do |file|
+      next unless file.type == 'file'
+
+      repository_content[file.path] = @installation_client.contents(full_repo_name, path: file.path, ref: head_sha).content
+    end
+
+    puts repository_content
+    repository_content
   end
 
   # (3) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app

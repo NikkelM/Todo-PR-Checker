@@ -54,7 +54,7 @@ APP_FRIENDLY_NAME=${Name of the CI check}
 
 The documentation linked above describes where to obtain these values.
 
-You can then use [smee](https://smee.io/) to create a webhook that will forward the webhook events to your local app:
+You can then use [smee](https://smee.io/) to forward the webhook events sent by GitHub to your local app, like this:
 
 ```bash
 smee --url https://smee.io/gsPiE7FUxg0q3TPz --path / --port 3000
