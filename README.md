@@ -1,8 +1,14 @@
 <h1 align="center">Todo PR Checker</h1>
 
 <p align="center">
-  <img src="./development/images/icon/images/icon.png" width="150" alt="Todo PR Checker">
+  <a href="https://github.com/marketplace/todo-pr-checker">
+    <img src="./development/images/icon/images/icon.png" width="150" alt="Todo PR Checker">
+  </a>
+  </br>
+  <i>Get the app on the <a href="https://github.com/marketplace/todo-pr-checker">GitHub Marketplace</a></i>
 </p>
+
+
 
 Do you keep forgetting to resolve that one `// TODO:...` or fix the last ` # Bug...` before merging your Pull Requests?
 
