@@ -1,2 +1,2 @@
 todo-pr-checker:
-  post_comment: 'never'
+  post_comment: 'always'
