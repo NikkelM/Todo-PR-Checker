@@ -153,7 +153,11 @@ helpers do
 
     # Merge the default settings with the settings from the file
     settings = default_settings.merge(file_settings) do |_, oldval, newval|
-      oldval.instance_of?(newval.class) ? newval : oldval
+      if [TrueClass, FalseClass].include?(oldval.class) && [TrueClass, FalseClass].include?(newval.class)
+        newval
+      else
+        oldval.instance_of?(newval.class) ? newval : oldval
+      end
     end
 
     puts settings

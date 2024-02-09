@@ -30,6 +30,7 @@ todo-pr-checker:
 
 | Setting | Type | Description | Default |
 | --- | --- | --- | --- |
+<!-- TODO: Test comment -->
 | `post_comment` | Boolean | Whether to post a comment on the Pull Request if any open action items are found. If disabled, the check will fail without additional feedback. | `true` |
 
 ## In-Depth
