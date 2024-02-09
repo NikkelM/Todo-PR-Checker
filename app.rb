@@ -143,7 +143,7 @@ helpers do
       file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
       file = Base64.decode64(file.content)
       # Get the settings from the file, the top-level key is todo-pr-checker
-      settings = YAML.safe_load(file, [Symbol], aliases: true)['todo-pr-checker']
+      settings = YAML.safe_load(file)['todo-pr-checker']
       puts settings
       settings
     rescue Octokit::NotFound
