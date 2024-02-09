@@ -1,15 +1,16 @@
 # frozen_string_literal: true
 
-require 'sinatra'
-require 'octokit'
+require 'base64'
 require 'dotenv/load'
-require 'json'
-require 'openssl'
-require 'jwt'
-require 'time'
-require 'logger'
 require 'git'
+require 'json'
+require 'jwt'
+require 'logger'
 require 'net/http'
+require 'octokit'
+require 'openssl'
+require 'sinatra'
+require 'time'
 require 'uri'
 require_relative 'version'
 
@@ -98,7 +99,7 @@ helpers do
     @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
     # Get the raw repository content from GitHub, at the Pull Request's HEAD commit
-    repository_content = get_repository_content(full_repo_name, @payload['check_run']['head_sha'])
+    settings = get_app_settings(full_repo_name, @payload['check_run']['head_sha'])
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
@@ -135,17 +136,17 @@ helpers do
     end
   end
 
-  # (3) Retrieves the raw content of the repository at the HEAD commit of the Pull Request
-  def get_repository_content(full_repo_name, head_sha)
-    repository_content = {}
-    @installation_client.contents(full_repo_name, ref: head_sha).each do |file|
-      next unless file.type == 'file'
-
-      repository_content[file.path] = @installation_client.contents(full_repo_name, path: file.path, ref: head_sha).content
+  # (3) Retrieves the `.github/config.yml` and parses the app's settings
+  def get_app_settings(full_repo_name, head_sha)
+    begin
+      file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
+      file = Base64.decode64(file.content)
+      logger.debug file
+      file
+    rescue Octokit::NotFound
+      logger.debug 'No .github/config.yml found'
+      nil
     end
-
-    puts repository_content
-    repository_content
   end
 
   # (3) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
