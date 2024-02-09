@@ -1,10 +1,17 @@
 # Changelog
 
-## v1.1.3
+## v1.2.0
 
 <!--Releasenotes start-->
-- Replaced an exception with a 400 status code when the app receives a webhook event with en empty payload.
+- The app now supports setting options in the `.github/config.yml` file. See the Readme for available options and how to use the file.
+- Added an option to control when the app posts a comment.
+- Added an option to control which action items the app should look for.
+- Added an option to control whether the app should look for action items in a case-sensitive manner.
 <!--Releasenotes end-->
+
+## v1.1.3
+
+- Replaced an exception with a 400 status code when the app receives a webhook event with en empty payload.
 
 ## v1.1.2
 
