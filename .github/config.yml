@@ -1,2 +1,2 @@
 todo-pr-checker:
-  post_comment: false
+  post_comment: true
