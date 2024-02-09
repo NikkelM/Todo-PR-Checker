@@ -131,10 +131,11 @@ helpers do
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
       # If the app has not previously created a comment, we don't needlessly create one
       if app_comment || app_settings['post_comment'] == 'always'
-        comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
         if app_comment
+          comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
           @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
         else
+          comment_body = "✔ No action items found!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
           @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
         end
       end
