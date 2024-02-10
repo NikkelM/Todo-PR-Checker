@@ -1,17 +1,17 @@
-// TODO: Alerts in this file: ? if multiline comments, 1 if standalone_items, 5 else #37
+// TODO: Alerts in this file: ? if multiline comments, 1 if standalone_items, 5 else
 let a = "todo";
-//TODO: Alert #37
+//TODO: Alert
 let b = "todo";
-// TODO Alert #37
+// TODO Alert
 let c = "todo";
-/* TODO: Alert #37 */ 
+/* TODO: Alert */ 
 let d = "todo";
-/* TODO: Alert  #37
-let alertThis = "TODO"; #37
+/* TODO: Alert
+let alertThis = "TODO";
 */
 let e = "todo";
 /*
-TODO: Alert #37 */
+TODO: Alert */
 let f = "todo";
 let g = "todo"; // TODO: Alert
 
