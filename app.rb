@@ -145,7 +145,7 @@ helpers do
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'success',
-        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.#{comment_footer}" },
+        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.\n#{comment_footer}" },
         accept: 'application/vnd.github+json'
       )
     end
@@ -319,9 +319,9 @@ helpers do
                         "✘ #{number_of_todos} unresolved action items found!"
                       end
     comment_summary = if number_of_todos == 1
-                        "There is 1 unresolved action item in this Pull Request:\n\n"
+                        "There is **1** unresolved action item in this Pull Request:\n\n"
                       else
-                        "There are #{number_of_todos} unresolved action items in this Pull Request:\n\n"
+                        "There are **#{number_of_todos}** unresolved action items in this Pull Request:\n\n"
                       end
 
     comment_body = ''
