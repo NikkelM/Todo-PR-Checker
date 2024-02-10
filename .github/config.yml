@@ -16,4 +16,4 @@ todo-pr-checker:
   # Whether or not searching for action items should be case sensitive
   case_sensitive: false
   # Files that get matched by any of these regular expressions will be ignored
-  ignore_regex: ['validation/', '*.rb']
+  ignore_regex: []
