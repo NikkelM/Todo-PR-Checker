@@ -257,12 +257,12 @@ helpers do
       file_changes.each do |line|
         text = line[:text].strip
 
-        # Set the flag if the line starts a block comment
+        # Set the flag if the line starts a block comment, or is the start of a block comment
         in_multiline_comment ||= enable_multiline_comments && comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
-        in_single_line_block_comment = comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start]) && text.end_with?(comment_char[1][:block_end])
+        on_block_comment_starting_line = comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
 
         # If the line is a comment and contains any action item, add it to the output collection
-        file_todos << line if (text.start_with?(comment_char[1][:line]) || in_single_line_block_comment || in_multiline_comment) && regexes.any? { |regex| text.match(regex) }
+        file_todos << line if (text.start_with?(comment_char[1][:line]) || on_block_comment_starting_line || in_multiline_comment) && regexes.any? { |regex| text.match(regex) }
 
         # Reset the flag if the line ends a block comment
         in_multiline_comment = false if !enable_multiline_comments || (comment_char[1][:block_end] && text.end_with?(comment_char[1][:block_end]))
