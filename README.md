@@ -18,7 +18,7 @@ This list will update whenever new changes are pushed, so you always know exactl
 The app supports a wide array of programming languages and action items.
 Should you find that your language of choice or action item is not supported out-of-the-box, you can easily configure the app to support it.
 
-To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app will only detect action items if the comment starts in its own line.
+To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app will only look for action items if the comment starts in its own line.
 The following examples would *not* cause the app to flag the action items:
 
 ```javascript
@@ -29,15 +29,8 @@ If the comment does not start on its own line, the TODO action item will not be 
 */
 ```
 
-These action items would however be flagged correctly:
-
-```javascript
-// TODO: If a line comment stands on its own, action items will be flagged.
-/*
-Multiline block comments are supported, no matter how many lines they span,
-the TODO will be detected
-*/
-```
+Additionally, support for multiline comments is *disabled* by default, as it may cause the app to incorrectly identify action items if the opening or closing characters of the block comment are not included in the Pull Request diff.
+You may enable support for multiline comments in the options, see the section below.
 
 ## Options
 
