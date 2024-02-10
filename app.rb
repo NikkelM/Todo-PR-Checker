@@ -141,12 +141,24 @@ helpers do
       end
 
       # Mark the check run as successful, as no action items were found
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success', output: { title: '✔ All action items have been resolved!', summary: "Did I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!" }, accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(
+        full_repo_name, check_run_id,
+        status: 'completed',
+        conclusion: 'success',
+        output: { title: '✔ All action items have been resolved!', summary: 'Did I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!' },
+        accept: 'application/vnd.github+json'
+      )
     end
   rescue StandardError => e
     logger.error "An error occurred: #{e}"
     # If an error occurred, mark the check run as failed
-    @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: 'An internal error occurred', summary: "If this keeps happening, please report it [here](https://github.com/NikkelM/Todo-PR-Checker/issues).\n\n#{e.message}" }, accept: 'application/vnd.github+json')
+    @installation_client.update_check_run(
+      full_repo_name, check_run_id,
+      status: 'completed',
+      conclusion: 'failure',
+      output: { title: 'An internal error occurred', summary: "If this keeps happening, please report it [here](https://github.com/NikkelM/Todo-PR-Checker/issues).\n\n#{e.message}" },
+      accept: 'application/vnd.github+json'
+    )
   end
 
   # (3) Retrieves the `.github/config.yml` and parses the app's options

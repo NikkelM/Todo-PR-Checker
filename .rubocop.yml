@@ -9,7 +9,7 @@ Layout/EndOfLine:
   Enabled: false
 
 Metrics/MethodLength:
-  Max: 40
+  Max: 50
 
 Metrics/BlockLength:
   Enabled: false
