@@ -155,7 +155,7 @@ helpers do
     @installation_client.update_check_run(
       full_repo_name, check_run_id,
       status: 'completed',
-      conclusion: 'failure',
+      conclusion: 'neutral',
       output: { title: 'An internal error has occurred!', summary: 'If this keeps happening, please report it [here](https://github.com/NikkelM/Todo-PR-Checker/issues).', text: e.message },
       accept: 'application/vnd.github+json'
     )
