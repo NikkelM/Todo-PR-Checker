@@ -116,29 +116,28 @@ helpers do
     if todo_changes.any?
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
-        comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name)
+        check_run_title, comment_summary, comment_body, comment_footer = create_pr_comment_from_changes(todo_changes, full_repo_name).values_at(:title, :summary, :body, :footer)
 
         # Post or update the comment with the found action items
         if app_comment
-          @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, comment_summary + comment_body + comment_footer, accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, comment_summary + comment_body + comment_footer, accept: 'application/vnd.github+json')
         end
       end
 
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: 'Action items found', summary: comment_body }, accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: comment_body + comment_footer }, accept: 'application/vnd.github+json')
     else
       comment_header = '✔ No action items found!'
-      comment_body = 'Did I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!'
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
       # If the app has not previously created a comment, we only create one if the user has enabled the option
       if app_comment || app_options['post_comment'] == 'always'
         if app_comment
           comment_header = '✔ All action items have been resolved!'
-          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_header}\n----\n#{comment_body}", accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, comment_header + comment_footer, accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_header}\n----\n#{comment_body}", accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, comment_header + comment_footer, accept: 'application/vnd.github+json')
         end
       end
 
@@ -147,7 +146,7 @@ helpers do
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'success',
-        output: { title: comment_header, summary: comment_body },
+        output: { title: comment_header, summary: comment_footer },
         accept: 'application/vnd.github+json'
       )
     end
@@ -158,7 +157,7 @@ helpers do
       full_repo_name, check_run_id,
       status: 'completed',
       conclusion: 'failure',
-      output: { title: 'An internal error occurred', summary: "If this keeps happening, please report it [here](https://github.com/NikkelM/Todo-PR-Checker/issues).\n\n#{e.message}" },
+      output: { title: 'An internal error has occurred!', summary: 'If this keeps happening, please report it [here](https://github.com/NikkelM/Todo-PR-Checker/issues).', text: e.message },
       accept: 'application/vnd.github+json'
     )
   end
@@ -256,13 +255,13 @@ helpers do
         text = line[:text].strip
 
         # Set the flag if the line starts a block comment
-        in_block_comment = true if comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
+        in_block_comment ||= comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
 
         # If the line is a comment and contains any action item, add it to the output collection
         file_todos << line if (text.start_with?(comment_char[1][:line]) || in_block_comment) && regexes.any? { |regex| text.match(regex) }
 
         # Reset the flag if the line ends a block comment
-        in_block_comment = false if comment_char[1][:block_start] && text.end_with?(comment_char[1][:block_end])
+        in_block_comment = false if comment_char[1][:block_end] && text.end_with?(comment_char[1][:block_end])
       end
 
       # We don't want to add files to the output collection if they don't contain any action items, as they shouldn't be posted in the comment
@@ -272,6 +271,7 @@ helpers do
     todo_changes
   end
 
+  # (6) Retrieves the file types and comment characters for the app's supported languages, and user defined values
   def get_comment_chars(added_languages)
     default_comment_chars = {
       %w[md html astro xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
@@ -307,15 +307,21 @@ helpers do
     unwrapped_comment_chars
   end
 
-  # (6) Creates a comment text from the found action items, with embedded links to the relevant lines
+  # (7) Creates a comment text from the found action items, with embedded links to the relevant lines
   def create_pr_comment_from_changes(todo_changes, full_repo_name)
     number_of_todos = todo_changes.values.flatten.count
-    comment_body = if number_of_todos == 1
-                     "There is **1** unresolved action item in this Pull Request:\n\n"
-                   else
-                     "There are **#{number_of_todos}** unresolved action items in this Pull Request:\n\n"
-                   end
+    check_run_title = if number_of_todos == 1
+                        '✘ 1 unresolved action item found!'
+                      else
+                        "✘ #{number_of_todos} unresolved action items found!"
+                      end
+    comment_summary = if number_of_todos == 1
+                        "There is 1 unresolved action item in this Pull Request:\n\n"
+                      else
+                        "There are #{number_of_todos} unresolved action items in this Pull Request:\n\n"
+                      end
 
+    comment_body = ''
     todo_changes.each do |file, changes|
       file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
       num_items = if changes.count == 1
@@ -338,12 +344,12 @@ helpers do
                         end
       end
     end
-    comment_body += "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
+    comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
-    comment_body
+    { title: check_run_title, summary: comment_summary, body: comment_body, footer: comment_footer }
   end
 
-  # (7) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
+  # (8) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
   def fetch_app_comment(full_repo_name, pull_number)
     comments = @installation_client.issue_comments(full_repo_name, pull_number, accept: 'application/vnd.github+json')
 

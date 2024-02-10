@@ -5,6 +5,7 @@
 <!--Releasenotes start-->
 - The app will now always include the results of the action item search in the check run summary.
 - If the app encounters an error while the check is running, the check will now be failed and the error will be included in the check run summary.
+- Fixed a bug where the app would incorrectly classify a line as not being part of a block comment.
 <!--Releasenotes end-->
 
 ## v1.2.0
