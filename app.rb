@@ -177,11 +177,11 @@ helpers do
     accepted_option_values = {
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
       'enable_multiline_comments' => ->(value) { [true, false].include?(value) },
-      'action_items' => ->(value) { value.is_a?(Array) },
+      'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
-      'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } },
+      'add_languages' => ->(value) { value.is_a?(Array) && (1..10).include?(value.size) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } },
       # The regex checks if the given input is a valid .gitignore pattern
-      'ignore_files' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } }
+      'ignore_files' => ->(value) { value.is_a?(Array) && (1..7).include?(value.size) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
