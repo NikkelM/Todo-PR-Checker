@@ -1,5 +1,5 @@
-// TODO: Alerts in this file: 7 #37
-let a = "todo";
+// TODO: Alerts in this file: 7, 8 if standalone #37
+let a = "todo"; // TODO: Standalone alert
 //TODO: Alert #37
 let b = "todo";
 // TODO Alert #37
