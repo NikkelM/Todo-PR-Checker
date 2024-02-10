@@ -8,8 +8,6 @@
   <i>Get the app on the <a href="https://github.com/marketplace/todo-pr-checker">GitHub Marketplace</a></i>
 </p>
 
-
-
 Do you keep forgetting to resolve that one `// TODO:...` or fix the last ` # Bug...` before merging your Pull Requests?
 
 The Todo PR Checker will make sure that doesn't happen anymore.
@@ -20,7 +18,7 @@ This list will update whenever new changes are pushed, so you always know exactl
 The app supports a wide array of programming languages and action items.
 Should you find that your language of choice or action item is not supported out-of-the-box, you can easily configure the app to support it.
 
-To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app will only detect action items if the comment starts in its own line.
+To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app will only look for action items if the comment starts in its own line.
 The following examples would *not* cause the app to flag the action items:
 
 ```javascript
@@ -31,15 +29,8 @@ If the comment does not start on its own line, the TODO action item will not be 
 */
 ```
 
-These action items would however be flagged correctly:
-
-```javascript
-// TODO: If a line comment stands on its own, action items will be flagged.
-/*
-Multiline block comments are supported, no matter how many lines they span,
-the TODO will be detected
-*/
-```
+Additionally, support for multiline comments is *disabled* by default, as it may cause the app to incorrectly identify action items if the opening or closing characters of the block comment are not included in the Pull Request diff.
+You may enable support for multiline comments in the options, see the section below.
 
 ## Options
 
@@ -50,7 +41,8 @@ To configure options, add a `todo-pr-checker` key at the top-level of your `.git
 
 ```yaml
 todo-pr-checker:
-  post_comment: true
+  post_comment: 'items_found'
+  (...)
 ```
 
 To get started, you can copy the `.github/config.yml` file from this repository and adjust it to your needs.
@@ -60,9 +52,10 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 | Option | Possible Values | Description | Default |
 | --- | --- | --- | --- |
 | `post_comment` | `items_found`, `always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. | `items_found` |
+| `enable_multiline_comments` | `true`, `false` | Whether or not looking for action items in multiline block comments is enabled or not. When enabled, the app *may* incorrectly mark action items in your Pull Request if at least one of the opening or closing line of the block comment (e.g. `*/` and `/*` in JavaScript) are not included in the Pull Request diff, which causes them to not be found by the app. For multiline comments to always work, you must ensure that both the opening and closing characters are included in the diff. Action items located on the first line of a block comment will always be detected, even if this option is disabled. | `false` |
 | `action_items` | `string[]` | A list of action items to look for in code comments. If you set this option, the default values will be overwritten, so you must include them in your list to use them. | `['TODO', 'FIXME', 'BUG']` |
 | `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. | `false` |
-| `add_languages` | `[string[file_type, line_comment, block_comment_start, block_comment_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['css', null, '/*', '*/'], ['.py', '#']]` | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a `line_comment`, you must set `line_comment` to `null`. If defining `block_comment_start`, `block_comment_end` must also be defined. *The file types shown in the example are already natively supported by the app.* | `null` |
+| `add_languages` | `[string[file_type, line_start, block_start, block_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['css', null, '/*', '*/'], ['.py', '#']]` | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a line comment, you must set `line_start` to `null`. If defining `block_start`, `block_end` must also be defined. *The file types shown in the example are already natively supported by the app.* | `null` |
 
 <details>
 <summary>Expand me to see the currently supported file types:</summary>

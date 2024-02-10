@@ -1,7 +1,13 @@
-dockerfile
-CHANGELOG.md
-README.md
 .github/
 development/
+validation/
+.dockerignore
 .gitattributes
 .gitignore
+.rubocop.yml
+CHANGELOG.md
+dockerfile
+LICENSE
+PRIVACY.md
+README.md
+development/

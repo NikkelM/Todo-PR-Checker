@@ -1,8 +1,17 @@
 # Changelog
 
-## v1.2.0
+## v1.3.0
 
 <!--Releasenotes start-->
+- The app will now always include the results of the action item search in the check run summary.
+- Added an option to enable multiline block comments. This option is disabled by default, as it may cause the app to incorrectly identify action items.
+- If the app encounters an error while the check is running, the check will now be concluded as neutral and the error message will be included in the check run summary.
+- Fixed a bug where setting one of the values of the `add_languages` option to `null` would cause the app to not accept any new languages.
+- Fixed a bug where the app would incorrectly classify a line as not being part of a block comment.
+<!--Releasenotes end-->
+
+## v1.2.0
+
 - Block comments that end one the same line they start on are now correctly identified as such.
 - Improved the performance of the app by optimizing the way it looks for action items in the code.
 - The app now supports setting options for the app in a `.github/config.yml` file.
@@ -10,7 +19,6 @@
 - Added an option to control which action items the app should look for.
 - Added an option to add support for additional languages/file types.
 - Added an option to control whether the app should look for action items in a case-sensitive manner.
-<!--Releasenotes end-->
 
 ## v1.1.3
 
