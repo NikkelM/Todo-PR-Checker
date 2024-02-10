@@ -1,4 +1,4 @@
-// TODO: Alerts in this file: 7, 8 if standalone #37
+// TODO: Alerts in this file: 4 if no block comments, 9 if standalone, 8 else #37
 let a = "todo";
 //TODO: Alert #37
 let b = "todo";
@@ -14,3 +14,7 @@ let e = "todo";
 TODO: Alert #37 */
 let f = "todo";
 let g = "todo"; // TODO: Standalone Alert
+
+
+
+/* TODO: Alert */
