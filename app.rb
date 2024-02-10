@@ -126,7 +126,7 @@ helpers do
       end
 
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: 'Action items found', summary: comment_body }, accept: 'application/vnd.github+json')
     else
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
       # If the app has not previously created a comment, we don't needlessly create one
@@ -141,8 +141,12 @@ helpers do
       end
 
       # Mark the check run as successful, as no action items were found
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success', accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'success', output: { title: '✔ All action items have been resolved!', summary: "Did I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!" }, accept: 'application/vnd.github+json')
     end
+  rescue StandardError => e
+    logger.error "An error occurred: #{e}"
+    # If an error occurred, mark the check run as failed
+    @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: 'An internal error occurred', summary: "If this keeps happening, please report it [here](https://github.com/NikkelM/Todo-PR-Checker/issues).\n\n#{e.message}" }, accept: 'application/vnd.github+json')
   end
 
   # (3) Retrieves the `.github/config.yml` and parses the app's options
