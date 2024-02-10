@@ -1,13 +1,13 @@
 todo-pr-checker:
   # When should comments be posted? 
   post_comment: 'items_found'
-  # If block comments should also be searched for action items
-  # This may result in some false positives or negatives if the opening or closing characters are not in the diff 
+  # If multiline comments should also be searched for action items
+  # This may result in some false positives or negatives if the opening or closing lines of a comment are not in the diff 
   enable_multiline_comments: false
-  # What action items should be looked for (will overwrite default values)
+  # What action items should be looked for (setting this will the overwrite default values)
   action_items: ['TODO', 'FIXME', 'BUG']
   # Languages/file types to add. At least either the line comment or both block comment definitions are required.
-  # If there are no line comments in the language, set the value to null.
+  # If there are no line comments in the language, you may set the value to null.
   add_languages: [
     ['js', '//', '/*', '*/'],
     ['css', null, '/*', '*/'],
