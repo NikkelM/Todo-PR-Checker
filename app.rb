@@ -101,6 +101,7 @@ helpers do
 
     # Get the options for the app from the `.github/config.yml` file in the repository
     app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
+    logger.debug "App options: #{app_options}"
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number)
@@ -128,15 +129,16 @@ helpers do
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
       @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: 'Action items found', summary: comment_body }, accept: 'application/vnd.github+json')
     else
+      comment_header = '✔ No action items found!'
+      comment_body = 'Did I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!'
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
-      # If the app has not previously created a comment, we don't needlessly create one
+      # If the app has not previously created a comment, we only create one if the user has enabled the option
       if app_comment || app_options['post_comment'] == 'always'
         if app_comment
-          comment_body = "✔ All action items have been resolved!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
-          @installation_client.update_comment(full_repo_name, app_comment.id, comment_body, accept: 'application/vnd.github+json')
+          comment_header = '✔ All action items have been resolved!'
+          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_header}\n----\n#{comment_body}", accept: 'application/vnd.github+json')
         else
-          comment_body = "✔ No action items found!\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
-          @installation_client.add_comment(full_repo_name, pull_number, comment_body, accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_header}\n----\n#{comment_body}", accept: 'application/vnd.github+json')
         end
       end
 
@@ -145,7 +147,7 @@ helpers do
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'success',
-        output: { title: '✔ All action items have been resolved!', summary: 'Did I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!' },
+        output: { title: comment_header, summary: comment_body },
         accept: 'application/vnd.github+json'
       )
     end
@@ -227,43 +229,11 @@ helpers do
   def check_for_todos(changes, options)
     action_items = options['action_items']
     case_sensitive = options['case_sensitive']
-    add_languages = options['add_languages']
 
     todo_changes = {}
     in_block_comment = false
 
-    comment_chars = {
-      %w[md html astro xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
-      %w[js java ts c cpp cs php swift go kotlin rust dart scala groovy sql css less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
-      %w[rb perl] => { line: '#', block_start: '=begin', block_end: '=end' },
-      %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
-      %w[r shell gitignore sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
-      %w[haskell lua] => { line: '--', block_start: '{-', block_end: '-}' },
-      %w[m tex] => { line: '%', block_start: nil, block_end: nil }
-    }
-
-    unwrapped_comment_chars = {}
-    comment_chars.each do |file_types, comment_symbols|
-      file_types.each do |file_type|
-        unwrapped_comment_chars[file_type] = comment_symbols
-      end
-    end
-
-    add_languages.each do |lang|
-      file_type = lang[0].sub(/^\./, '')
-      # The length of lang defines which permutation is given by the user
-      # Users may overwrite the default comment characters for a file type
-      case lang.length
-      when 2
-        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: nil, block_end: nil }
-      when 3
-        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[1], block_end: lang[2] }
-      when 4
-        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[2], block_end: lang[3] }
-      end
-    end
-
-    comment_chars = unwrapped_comment_chars
+    comment_chars = get_comment_chars(options['add_languages'])
 
     # Create a regex for each action item
     regexes = action_items.map do |item|
@@ -300,6 +270,41 @@ helpers do
     end
 
     todo_changes
+  end
+
+  def get_comment_chars(added_languages)
+    default_comment_chars = {
+      %w[md html astro xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
+      %w[js java ts c cpp cs php swift go kotlin rust dart scala groovy sql css less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
+      %w[rb perl] => { line: '#', block_start: '=begin', block_end: '=end' },
+      %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
+      %w[r shell gitignore sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
+      %w[haskell lua] => { line: '--', block_start: '{-', block_end: '-}' },
+      %w[m tex] => { line: '%', block_start: nil, block_end: nil }
+    }
+
+    unwrapped_comment_chars = {}
+    default_comment_chars.each do |file_types, comment_symbols|
+      file_types.each do |file_type|
+        unwrapped_comment_chars[file_type] = comment_symbols
+      end
+    end
+
+    added_languages.each do |lang|
+      file_type = lang[0].sub(/^\./, '')
+      # The length of lang defines which permutation is given by the user
+      # Users may overwrite the default comment characters for a file type
+      case lang.length
+      when 2
+        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: nil, block_end: nil }
+      when 3
+        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[1], block_end: lang[2] }
+      when 4
+        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[2], block_end: lang[3] }
+      end
+    end
+
+    unwrapped_comment_chars
   end
 
   # (6) Creates a comment text from the found action items, with embedded links to the relevant lines
