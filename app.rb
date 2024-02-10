@@ -101,21 +101,23 @@ helpers do
 
     # Get the options for the app from the `.github/config.yml` file in the repository
     app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
+    # logger.debug app_options
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
-    changes = get_pull_request_changes(full_repo_name, pull_number)
+    changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes = check_for_todos(changes, app_options)
 
     # If the app has previously created a comment on the Pull Request, fetch it
     app_comment = fetch_app_comment(full_repo_name, pull_number)
+    comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
-        check_run_title, comment_summary, comment_body, comment_footer = create_pr_comment_from_changes(todo_changes, full_repo_name).values_at(:title, :summary, :body, :footer)
+        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name).values_at(:title, :summary, :body)
 
         # Post or update the comment with the found action items
         if app_comment
@@ -168,15 +170,18 @@ helpers do
       'enable_multiline_comments' => true,
       'action_items' => %w[todo fixme bug],
       'case_sensitive' => false,
-      'add_languages' => []
+      'add_languages' => [],
+      'ignore_files' => []
     }
 
     accepted_option_values = {
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
       'enable_multiline_comments' => ->(value) { [true, false].include?(value) },
-      'action_items' => ->(value) { value.is_a?(Array) },
+      'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
-      'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } }
+      'add_languages' => ->(value) { value.is_a?(Array) && (1..10).include?(value.size) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } },
+      # The regex checks if the given input is a valid .gitignore pattern
+      'ignore_files' => ->(value) { value.is_a?(Array) && (1..7).include?(value.size) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
@@ -198,28 +203,47 @@ helpers do
   end
 
   # (4) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
-  def get_pull_request_changes(full_repo_name, pull_number)
+  def get_pull_request_changes(full_repo_name, pull_number, ignore_files_regex)
     diff = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github.diff')
+
+    ignore_files_regex.map! do |pattern|
+      pattern.gsub!('.', '\.')
+      pattern.gsub!('*', '.*')
+      pattern.gsub!('/', '\/')
+      Regexp.new(pattern)
+    end
 
     current_file = ''
     line_number = 0
     changes = {}
 
-    diff.each_line do |line|
-      # This is the most common case, indicating a line was added to the file
-      if line.start_with?('+') && !line.start_with?('+++')
+    diff_enum = diff.each_line
+    line = diff_enum.next rescue nil
+    loop do
+      break if line.nil?
+
+      if line.start_with?('+++')
+        while line&.start_with?('+++')
+          current_file = line[6..].strip
+          if ignore_files_regex.any? { |pattern| pattern.match?(current_file) }
+            loop do
+              line = diff_enum.next rescue nil
+              break if line.nil? || line.start_with?('+++')
+            end
+          else
+            changes[current_file] = []
+            break
+          end
+        end
+        break if line.nil?
+      elsif line.start_with?('+')
         changes[current_file] << { line: line_number, text: line[1..] }
-      # Lines that start with @@ contain the the starting line and its length for a new block of changes, for the old and new file respectively
       elsif line.start_with?('@@')
         line_number = line.split()[2].split(',')[0].to_i - 1
-      # Lines that start with +++ contain the new name of the file, which is the one we want to link to in the comment
-      elsif line.start_with?('+++')
-        current_file = line[6..].strip
-        changes[current_file] = []
       end
 
-      # We count the line numbers for lines in the new file, which means we need to exclude unchanged lines, and the special "no newline" line
       line_number += 1 unless line.start_with?('-') || line.chomp == '\ No newline at end of file'
+      line = diff_enum.next rescue nil
     end
 
     changes
@@ -347,9 +371,8 @@ helpers do
                         end
       end
     end
-    comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
-    { title: check_run_title, summary: comment_summary, body: comment_body, footer: comment_footer }
+    { title: check_run_title, summary: comment_summary, body: comment_body }
   end
 
   # (8) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil

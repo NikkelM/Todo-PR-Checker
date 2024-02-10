@@ -4,6 +4,7 @@
 
 <!--Releasenotes start-->
 - The app will now always include the results of the action item search in the check run summary.
+- Added an option that allows you to ignore files that match a specific pattern. 
 - Added an option to enable multiline block comments. This option is disabled by default, as it may cause the app to incorrectly identify action items.
 - If the app encounters an error while the check is running, the check will now be concluded as neutral and the error message will be included in the check run summary.
 - Fixed a bug where setting one of the values of the `add_languages` option to `null` would cause the app to not accept any new languages.
