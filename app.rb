@@ -175,7 +175,7 @@ helpers do
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
-      'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) } } }
+      'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)

@@ -6,7 +6,7 @@ todo-pr-checker:
   # Languages/file types to add. At least either the line comment or both block comment definitions are required.
   # If there are no line comments in the language, set the value to null.
   add_languages: [
-    ['js', '//', '/*', '*,'],
+    ['js', '//', '/*', '*/'],
     ['css', null, '/*', '*/'],
     ['.py', '#']
   ]
