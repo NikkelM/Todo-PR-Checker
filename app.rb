@@ -141,7 +141,7 @@ helpers do
           @installation_client.add_comment(full_repo_name, pull_number, "#{comment_header}\n----\n#{comment_body}", accept: 'application/vnd.github+json')
         end
       end
-
+# TODO: Test the output of the check run
       # Mark the check run as successful, as no action items were found
       @installation_client.update_check_run(
         full_repo_name, check_run_id,
