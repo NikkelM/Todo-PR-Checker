@@ -104,7 +104,7 @@ helpers do
     puts app_options
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
-    changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_regex'])
+    changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes = check_for_todos(changes, app_options)
@@ -170,8 +170,8 @@ helpers do
       'enable_multiline_comments' => true,
       'action_items' => %w[todo fixme bug],
       'case_sensitive' => false,
-      'add_languages' => [],
-      'ignore_regex' => []
+      'add_languages' => nil,
+      'ignore_files' => nil
     }
 
     accepted_option_values = {
@@ -181,7 +181,7 @@ helpers do
       'case_sensitive' => ->(value) { [true, false].include?(value) },
       'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } },
       # The regex checks if the given input is a valid .gitignore pattern
-      'ignore_regex' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } }
+      'ignore_files' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
@@ -203,10 +203,10 @@ helpers do
   end
 
   # (4) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
-  def get_pull_request_changes(full_repo_name, pull_number, ignore_regex)
+  def get_pull_request_changes(full_repo_name, pull_number, ignore_files_regex)
     diff = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github.diff')
 
-    ignore_regex.map! do |pattern|
+    ignore_files_regex.map! do |pattern|
       pattern.gsub!('.', '\.')
       pattern.gsub!('*', '.*')
       pattern.gsub!('/', '\/')
@@ -225,7 +225,7 @@ helpers do
       if line.start_with?('+++')
         while line&.start_with?('+++')
           current_file = line[6..].strip
-          if ignore_regex.any? { |pattern| pattern.match?(current_file) }
+          if ignore_files_regex.any? { |pattern| pattern.match?(current_file) }
             loop do
               line = diff_enum.next rescue nil
               break if line.nil? || line.start_with?('+++')
