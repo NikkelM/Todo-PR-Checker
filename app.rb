@@ -101,6 +101,7 @@ helpers do
 
     # Get the options for the app from the `.github/config.yml` file in the repository
     app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
+    puts app_options
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_regex'])
@@ -110,12 +111,13 @@ helpers do
 
     # If the app has previously created a comment on the Pull Request, fetch it
     app_comment = fetch_app_comment(full_repo_name, pull_number)
+    comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
-        check_run_title, comment_summary, comment_body, comment_footer = create_pr_comment_from_changes(todo_changes, full_repo_name).values_at(:title, :summary, :body, :footer)
+        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name).values_at(:title, :summary, :body)
 
         # Post or update the comment with the found action items
         if app_comment
@@ -204,37 +206,46 @@ helpers do
   def get_pull_request_changes(full_repo_name, pull_number, ignore_regex)
     diff = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github.diff')
 
+    ignore_regex.map! { |pattern| Regexp.new(pattern) }
     current_file = ''
     line_number = 0
     changes = {}
 
-    diff.each_line do |line|
-      puts line
-      # This is the most common case, indicating a line was added to the file
-      if line.start_with?('+') && !line.start_with?('+++')
+    diff_enum = diff.each_line
+    line = diff_enum.next rescue nil
+    loop do
+      break unless line
+
+      if line.start_with?('+ ')
         changes[current_file] << { line: line_number, text: line[1..] }
       # Lines that start with @@ contain the the starting line and its length for a new block of changes, for the old and new file respectively
       elsif line.start_with?('@@')
         line_number = line.split()[2].split(',')[0].to_i - 1
       # Lines that start with +++ contain the new name of the file, which is the one we want to link to in the comment
-      elsif line.start_with?('+++')
-        current_file = line[6..].strip
-        # If the file name matches an ignored pattern we skip it
-        # Skipping it means finding the next line that starts with +++, or until the end of the diff
-        if ignore_regex.any? { |pattern| pattern.match?(current_file) }
-          puts "Skipping file: #{current_file}"
-          current_file = ''
-          # Now skip ahead in the lines until we find the next file name
-          loop do
-            line = diff.gets
-            break if line.nil? || line.start_with?('+++')
+      else
+        # We use a while loop here to be able to skip over lines that belong to ignored files more easily
+        while line&.start_with?('+++')
+          current_file = line[6..].strip
+          # If the file name matches an ignored pattern we skip it
+          if ignore_regex.any? { |pattern| pattern.match?(current_file) }
+            # TODO: Remove the log
+            # TODO: Remember the skipped files and add them to the comment/run summary
+            puts "Skipping file: #{current_file}"
+            # Skip ahead in the diff until we find the next file name
+            loop do
+              line = diff_enum.next rescue nil
+              break if line.nil? || line.start_with?('+++')
+            end
+          else
+            changes[current_file] = []
+            break
           end
         end
-        changes[current_file] = []
+        break unless line
       end
 
-      # We count the line numbers for lines in the new file, which means we need to exclude unchanged lines, and the special "no newline" line
       line_number += 1 unless line.start_with?('-') || line.chomp == '\ No newline at end of file'
+      line = diff_enum.next rescue nil
     end
 
     changes
@@ -362,9 +373,8 @@ helpers do
                         end
       end
     end
-    comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
-    { title: check_run_title, summary: comment_summary, body: comment_body, footer: comment_footer }
+    { title: check_run_title, summary: comment_summary, body: comment_body }
   end
 
   # (8) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
