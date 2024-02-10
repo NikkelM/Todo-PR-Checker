@@ -103,7 +103,7 @@ helpers do
     app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
-    changes = get_pull_request_changes(full_repo_name, pull_number)
+    changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_regex'])
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes = check_for_todos(changes, app_options)
@@ -168,7 +168,8 @@ helpers do
       'enable_multiline_comments' => true,
       'action_items' => %w[todo fixme bug],
       'case_sensitive' => false,
-      'add_languages' => []
+      'add_languages' => [],
+      'ignore_regex' => []
     }
 
     accepted_option_values = {
@@ -176,7 +177,9 @@ helpers do
       'enable_multiline_comments' => ->(value) { [true, false].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
-      'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } }
+      'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } },
+      # The regex checks if the given input is a valid .gitignore pattern
+      'ignore_regex' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
@@ -198,7 +201,7 @@ helpers do
   end
 
   # (4) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
-  def get_pull_request_changes(full_repo_name, pull_number)
+  def get_pull_request_changes(full_repo_name, pull_number, ignore_regex)
     diff = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github.diff')
 
     current_file = ''
@@ -206,6 +209,7 @@ helpers do
     changes = {}
 
     diff.each_line do |line|
+      puts line
       # This is the most common case, indicating a line was added to the file
       if line.start_with?('+') && !line.start_with?('+++')
         changes[current_file] << { line: line_number, text: line[1..] }
@@ -215,6 +219,17 @@ helpers do
       # Lines that start with +++ contain the new name of the file, which is the one we want to link to in the comment
       elsif line.start_with?('+++')
         current_file = line[6..].strip
+        # If the file name matches an ignored pattern we skip it
+        # Skipping it means finding the next line that starts with +++, or until the end of the diff
+        if ignore_regex.any? { |pattern| pattern.match?(current_file) }
+          puts "Skipping file: #{current_file}"
+          current_file = ''
+          # Now skip ahead in the lines until we find the next file name
+          loop do
+            line = diff.gets
+            break if line.nil? || line.start_with?('+++')
+          end
+        end
         changes[current_file] = []
       end
 
