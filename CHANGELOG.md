@@ -4,7 +4,7 @@
 
 <!--Releasenotes start-->
 - The app will now always include the results of the action item search in the check run summary.
-- Added an option to enable multiline block comments. This option is disabled by default, as it may cause the app to incorrectly (mis)identify action items.
+- Added an option to enable multiline block comments. This option is disabled by default, as it may cause the app to incorrectly identify action items.
 - If the app encounters an error while the check is running, the check will now be failed and the error will be included in the check run summary.
 - Fixed a bug where setting one of the values of the `add_languages` option to `null` would cause the app to not accept any new languages.
 - Fixed a bug where the app would incorrectly classify a line as not being part of a block comment.
