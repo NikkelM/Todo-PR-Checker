@@ -206,7 +206,13 @@ helpers do
   def get_pull_request_changes(full_repo_name, pull_number, ignore_regex)
     diff = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github.diff')
 
-    ignore_regex.map! { |pattern| Regexp.new(pattern) }
+    ignore_regex.map! do |pattern|
+      pattern.gsub!('.', '\.')
+      pattern.gsub!('*', '.*')
+      pattern.gsub!('/', '\/')
+      Regexp.new(pattern)
+    end
+
     current_file = ''
     line_number = 0
     changes = {}
@@ -214,24 +220,12 @@ helpers do
     diff_enum = diff.each_line
     line = diff_enum.next rescue nil
     loop do
-      break unless line
+      break if line.nil?
 
-      if line.start_with?('+ ')
-        changes[current_file] << { line: line_number, text: line[1..] }
-      # Lines that start with @@ contain the the starting line and its length for a new block of changes, for the old and new file respectively
-      elsif line.start_with?('@@')
-        line_number = line.split()[2].split(',')[0].to_i - 1
-      # Lines that start with +++ contain the new name of the file, which is the one we want to link to in the comment
-      else
-        # We use a while loop here to be able to skip over lines that belong to ignored files more easily
+      if line.start_with?('+++')
         while line&.start_with?('+++')
           current_file = line[6..].strip
-          # If the file name matches an ignored pattern we skip it
           if ignore_regex.any? { |pattern| pattern.match?(current_file) }
-            # TODO: Remove the log
-            # TODO: Remember the skipped files and add them to the comment/run summary
-            puts "Skipping file: #{current_file}"
-            # Skip ahead in the diff until we find the next file name
             loop do
               line = diff_enum.next rescue nil
               break if line.nil? || line.start_with?('+++')
@@ -241,7 +235,11 @@ helpers do
             break
           end
         end
-        break unless line
+        break if line.nil?
+      elsif line.start_with?('+')
+        changes[current_file] << { line: line_number, text: line[1..] }
+      elsif line.start_with?('@@')
+        line_number = line.split()[2].split(',')[0].to_i - 1
       end
 
       line_number += 1 unless line.start_with?('-') || line.chomp == '\ No newline at end of file'
