@@ -8,8 +8,6 @@
   <i>Get the app on the <a href="https://github.com/marketplace/todo-pr-checker">GitHub Marketplace</a></i>
 </p>
 
-
-
 Do you keep forgetting to resolve that one `// TODO:...` or fix the last ` # Bug...` before merging your Pull Requests?
 
 The Todo PR Checker will make sure that doesn't happen anymore.
@@ -50,7 +48,7 @@ To configure options, add a `todo-pr-checker` key at the top-level of your `.git
 
 ```yaml
 todo-pr-checker:
-  post_comment: true
+  post_comment: 'items_found'
   (...)
 ```
 
@@ -61,6 +59,7 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 | Option | Possible Values | Description | Default |
 | --- | --- | --- | --- |
 | `post_comment` | `items_found`, `always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. | `items_found` |
+| `enable_block_comments` | `true`, `false` | Whether or not looking for action items in block comments is enabled or not. You may want to turn this option off if you find it to incorrectly mark action items in your Pull Request. This behaviour may appear if either the opening or closing characters (e.g. `*/` and `/*` in JavaScript) are not included in the Pull Request diff, which causes them to not be found by the app. For block comments to always work, you must ensure that both the opening and closing characters are included in the diff. | `true` |
 | `action_items` | `string[]` | A list of action items to look for in code comments. If you set this option, the default values will be overwritten, so you must include them in your list to use them. | `['TODO', 'FIXME', 'BUG']` |
 | `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. | `false` |
 | `add_languages` | `[string[file_type, line_comment, block_start, block_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['css', null, '/*', '*/'], ['.py', '#']]` | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a `line_comment`, you must set `line_comment` to `null`. If defining `block_comment_start`, `block_comment_end` must also be defined. *The file types shown in the example are already natively supported by the app.* | `null` |

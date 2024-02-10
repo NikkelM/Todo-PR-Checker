@@ -166,6 +166,7 @@ helpers do
   def get_app_options(full_repo_name, head_sha)
     default_options = {
       'post_comment' => 'items_found',
+      'enable_block_comments' => true,
       'action_items' => %w[todo fixme bug],
       'case_sensitive' => false,
       'add_languages' => []
@@ -173,6 +174,7 @@ helpers do
 
     accepted_option_values = {
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
+      'enable_block_comments' => ->(value) { [true, false].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
       'add_languages' => ->(value) { value.is_a?(Array) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } }
@@ -226,6 +228,7 @@ helpers do
 
   # (5) Checks changed lines in supported file types for action items in code comments ("Todos")
   def check_for_todos(changes, options)
+    enable_block_comments = options['enable_block_comments']
     action_items = options['action_items']
     case_sensitive = options['case_sensitive']
 
@@ -258,7 +261,7 @@ helpers do
         in_block_comment ||= comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
 
         # If the line is a comment and contains any action item, add it to the output collection
-        file_todos << line if (text.start_with?(comment_char[1][:line]) || in_block_comment) && regexes.any? { |regex| text.match(regex) }
+        file_todos << line if (text.start_with?(comment_char[1][:line]) || (in_block_comment && enable_block_comments)) && regexes.any? { |regex| text.match(regex) }
 
         # Reset the flag if the line ends a block comment
         in_block_comment = false if comment_char[1][:block_end] && text.end_with?(comment_char[1][:block_end])

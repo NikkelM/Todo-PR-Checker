@@ -1,6 +1,9 @@
 todo-pr-checker:
   # When should comments be posted? 
   post_comment: 'items_found'
+  # If block comments should also be searched for action items
+  # This may result in some false positives or negatives if the opening or closing characters are not in the diff 
+  enable_block_comments: true
   # What action items should be looked for (will overwrite default values)
   action_items: ['TODO', 'FIXME', 'BUG']
   # Languages/file types to add. At least either the line comment or both block comment definitions are required.
