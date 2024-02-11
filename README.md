@@ -112,7 +112,7 @@ Make sure to also set the Webhook URL in the app settings on GitHub to the same 
 Then, you can start the app with:
 
 ```bash
-ruby ./app.rb 
+ruby ./app.rb
 ```
 
 If you have correctly created and installed the app in a repository, and set up the webhooks correctly, you should now see the app receiving events like these when you create or update a Pull Request:
