@@ -184,7 +184,8 @@ helpers do
       'ignore_files' => ->(value) { value.is_a?(Array) && (1..7).include?(value.size) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } }
     }
 
-    file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
+    file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha) rescue nil
+    file ||= @installation_client.contents(full_repo_name, path: '.github/config.yaml', ref: head_sha)
     decoded_file = Base64.decode64(file.content)
     file_options = YAML.safe_load(decoded_file)['todo-pr-checker'] || {}
 
@@ -198,7 +199,7 @@ helpers do
                     end
     end
   rescue Octokit::NotFound
-    logger.debug 'No .github/config.yml found, or options validation failed. Using default options.'
+    logger.debug 'No .github/config.yml or .github/config.yaml found, or options validation failed. Using default options.'
     default_options
   end
 
@@ -301,13 +302,20 @@ helpers do
   # (6) Retrieves the file types and comment characters for the app's supported languages, and user defined values
   def get_comment_chars(added_languages)
     default_comment_chars = {
-      %w[md html astro xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
-      %w[js java ts c cpp cs php swift go kotlin rust dart scala groovy sql css less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
-      %w[rb perl] => { line: '#', block_start: '=begin', block_end: '=end' },
+      %w[md html xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
+      %w[astro] => { line: '//', block_start: '<!--', block_end: '-->' },
+      %w[js java ts c cpp cs php swift go kt rs dart sc groovy less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
+      %w[css] => { line: '/*', block_start: '/*', block_end: '*/' },
+      %w[r gitignore sh bash yml yaml] => { line: '#', block_start: nil, block_end: nil },
+      %w[rb] => { line: '#', block_start: '=begin', block_end: '=end' },
+      %w[pl] => { line: '#', block_start: '=', block_end: '=cut' },
       %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
-      %w[r shell gitignore sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
-      %w[haskell lua] => { line: '--', block_start: '{-', block_end: '-}' },
-      %w[m tex] => { line: '%', block_start: nil, block_end: nil }
+      %w[ps1] => { line: '#', block_start: '<#', block_end: '#>' },
+      %w[sql] => { line: '--', block_start: '/*', block_end: '*/' },
+      %w[hs] => { line: '--', block_start: '{-', block_end: '-}' },
+      %w[lua] => { line: '--', block_start: '--[[', block_end: ']]' },
+      %w[m] => { line: '%', block_start: '%{', block_end: '%}' },
+      %w[tex] => { line: '%', block_start: nil, block_end: nil }
     }
 
     unwrapped_comment_chars = {}
