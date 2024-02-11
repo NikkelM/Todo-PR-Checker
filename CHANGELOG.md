@@ -4,6 +4,7 @@
 
 <!--Releasenotes start-->
 - Both `.github/config.yml` and `.github/config.yaml` are now supported for the app's configuration.
+- Fixed a number of misconfigurations when mapping file extensions to their comment delimiters.
 <!--Releasenotes end-->
 
 ## v1.3.0

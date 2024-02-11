@@ -301,16 +301,21 @@ helpers do
 
   # (6) Retrieves the file types and comment characters for the app's supported languages, and user defined values
   def get_comment_chars(added_languages)
-    # TODO: Test these
     default_comment_chars = {
       %w[md html xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
       %w[astro] => { line: '//', block_start: '<!--', block_end: '-->' },
-      %w[js java ts c cpp cs php swift go kotlin rust dart scala groovy sql css less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
-      %w[rb perl] => { line: '#', block_start: '=begin', block_end: '=end' },
+      %w[js java ts c cpp cs php swift go kt rs dart sc groovy less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
+      %w[css] => { line: '/*', block_start: '/*', block_end: '*/' },
+      %w[r gitignore sh bash yml yaml] => { line: '#', block_start: nil, block_end: nil },
+      %w[rb] => { line: '#', block_start: '=begin', block_end: '=end' },
+      %w[pl] => { line: '#', block_start: '=', block_end: '=cut' },
       %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
-      %w[r shell gitignore sh bash yml yaml ps1] => { line: '#', block_start: nil, block_end: nil },
-      %w[haskell lua] => { line: '--', block_start: '{-', block_end: '-}' },
-      %w[m tex] => { line: '%', block_start: nil, block_end: nil }
+      %w[ps1] => { line: '#', block_start: '<#', block_end: '#>' },
+      %w[sql] => { line: '--', block_start: '/*', block_end: '*/' },
+      %w[hs] => { line: '--', block_start: '{-', block_end: '-}' },
+      %w[lua] => { line: '--', block_start: '--[[', block_end: ']]' },
+      %w[m] => { line: '%', block_start: '%{', block_end: '%}' },
+      %w[tex] => { line: '%', block_start: nil, block_end: nil }
     }
 
     unwrapped_comment_chars = {}
