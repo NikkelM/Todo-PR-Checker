@@ -1,11 +1,15 @@
 # Changelog
 
-## v1.3.1
+## v1.3.2
 
 <!--Releasenotes start-->
+- Renamed the `multiline_comments` configuration option.
+<!--Releasenotes end-->
+
+## v1.3.1
+
 - Both `.github/config.yml` and `.github/config.yaml` are now supported for the app's configuration.
 - Fixed a number of misconfigurations when mapping file extensions to their comment delimiters.
-<!--Releasenotes end-->
 
 ## v1.3.0
 
