@@ -56,7 +56,7 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 | `action_items` | `string[]`, maximum 15 entries | A list of action items to look for in code comments. If you set this option, the default values will be overwritten, so you must include them in your list to use them. By default, action items are case insensitive. You may specify up to 15 items. | `['TODO', 'FIXME', 'BUG']` |
 | `add_languages` | `[string[file_type, line_start, block_start, block_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['css', null, '/*', '*/'], ['.py', '#']]`, maximum 10 entries | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a line comment, you must set `line_start` to `null`. If defining `block_start`, `block_end` must also be defined. You may specify up to 10 new file types. *The file types shown in the example are already natively supported by the app.* | `null` |
 | `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. | `false` |
-| `enable_multiline_comments` | `true`, `false` | Whether or not looking for action items in multiline block comments is enabled or not. When enabled, the app *may* incorrectly mark action items in your Pull Request if at least one of the opening or closing line of the block comment (e.g. `*/` and `/*` in JavaScript) are not included in the Pull Request diff, which causes them to not be found by the app. For multiline comments to always work, you must ensure that both the opening and closing characters are included in the diff. Action items located on the first line of a block comment will always be detected, even if this option is disabled. | `false` |
+| `multiline_comments` | `true`, `false` | Whether or not looking for action items in multiline block comments is enabled or not. When enabled, the app *may* incorrectly mark action items in your Pull Request if at least one of the opening or closing line of the block comment (e.g. `*/` and `/*` in JavaScript) are not included in the Pull Request diff, which causes them to not be found by the app. For multiline comments to always work, you must ensure that both the opening and closing characters are included in the diff. Action items located on the first line of a block comment will always be detected, even if this option is disabled. | `false` |
 
 <details>
 <summary>Expand me to see the currently supported file types:</summary>
@@ -66,14 +66,14 @@ To get started, you can copy the `.github/config.yml` file from this repository 
   <li><code>.c</code>, <code>.cpp</code>, <code>.cs</code>, <code>.css</code></li>
   <li><code>.dart</code></li>
   <li><code>.gitignore</code>, <code>.go</code>, <code>.groovy</code></li>
-  <li><code>.haskell</code>, <code>.html</code></li>
+  <li><code>.hs</code>, <code>.html</code></li>
   <li><code>.java</code>, <code>.js</code></li>
-  <li><code>.kotlin</code></li>
+  <li><code>.kt</code></li>
   <li><code>.less</code>, <code>.lua</code></li>
   <li><code>.m</code>, <code>.md</code></li>
-  <li><code>.perl</code>, <code>.php</code>, <code>.ps1</code>, <code>.py</code></li>
-  <li><code>.r</code>, <code>.rb</code>, <code>.rust</code></li>
-  <li><code>.sass</code>, <code>.scala</code>, <code>.scss</code>, <code>.sh</code>, <code>.shell</code>, <code>.sql</code>, <code>.swift</code></li>
+  <li><code>.pl</code>, <code>.php</code>, <code>.ps1</code>, <code>.py</code></li>
+  <li><code>.r</code>, <code>.rb</code>, <code>.rs</code></li>
+  <li><code>.sass</code>, <code>.sc</code>, <code>.scss</code>, <code>.sh</code>, <code>.sql</code>, <code>.swift</code></li>
   <li><code>.tex</code>, <code>.ts</code></li>
   <li><code>.yaml</code>, <code>.yml</code></li>
   <li><code>.xml</code></li>
