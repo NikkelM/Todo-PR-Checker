@@ -66,14 +66,14 @@ To get started, you can copy the `.github/config.yml` file from this repository 
   <li><code>.c</code>, <code>.cpp</code>, <code>.cs</code>, <code>.css</code></li>
   <li><code>.dart</code></li>
   <li><code>.gitignore</code>, <code>.go</code>, <code>.groovy</code></li>
-  <li><code>.haskell</code>, <code>.html</code></li>
+  <li><code>.hs</code>, <code>.html</code></li>
   <li><code>.java</code>, <code>.js</code></li>
-  <li><code>.kotlin</code></li>
+  <li><code>.kt</code></li>
   <li><code>.less</code>, <code>.lua</code></li>
   <li><code>.m</code>, <code>.md</code></li>
-  <li><code>.perl</code>, <code>.php</code>, <code>.ps1</code>, <code>.py</code></li>
-  <li><code>.r</code>, <code>.rb</code>, <code>.rust</code></li>
-  <li><code>.sass</code>, <code>.scala</code>, <code>.scss</code>, <code>.sh</code>, <code>.shell</code>, <code>.sql</code>, <code>.swift</code></li>
+  <li><code>.pl</code>, <code>.php</code>, <code>.ps1</code>, <code>.py</code></li>
+  <li><code>.r</code>, <code>.rb</code>, <code>.rs</code></li>
+  <li><code>.sass</code>, <code>.sc</code>, <code>.scss</code>, <code>.sh</code>, <code>.sql</code>, <code>.swift</code></li>
   <li><code>.tex</code>, <code>.ts</code></li>
   <li><code>.yaml</code>, <code>.yml</code></li>
   <li><code>.xml</code></li>
