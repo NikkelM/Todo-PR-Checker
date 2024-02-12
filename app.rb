@@ -167,7 +167,7 @@ helpers do
   def get_app_options(full_repo_name, head_sha)
     default_options = {
       'post_comment' => 'items_found',
-      'enable_multiline_comments' => true,
+      'multiline_comments' => true,
       'action_items' => %w[todo fixme bug],
       'case_sensitive' => false,
       'add_languages' => [],
@@ -176,7 +176,7 @@ helpers do
 
     accepted_option_values = {
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
-      'enable_multiline_comments' => ->(value) { [true, false].include?(value) },
+      'multiline_comments' => ->(value) { [true, false].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
       'add_languages' => ->(value) { value.is_a?(Array) && (1..10).include?(value.size) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } },
@@ -252,7 +252,7 @@ helpers do
 
   # (5) Checks changed lines in supported file types for action items in code comments ("Todos")
   def check_for_todos(changes, options)
-    enable_multiline_comments = options['enable_multiline_comments']
+    multiline_comments = options['multiline_comments']
     action_items = options['action_items']
     case_sensitive = options['case_sensitive']
 
@@ -282,14 +282,14 @@ helpers do
         text = line[:text].strip
 
         # Set the flag if the line starts a block comment, or is the start of a block comment
-        in_multiline_comment ||= enable_multiline_comments && comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
+        in_multiline_comment ||= multiline_comments && comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
         on_block_comment_starting_line = comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
 
         # If the line is a comment and contains any action item, add it to the output collection
         file_todos << line if (text.start_with?(comment_char[1][:line]) || on_block_comment_starting_line || in_multiline_comment) && regexes.any? { |regex| text.match(regex) }
 
         # Reset the flag if the line ends a block comment
-        in_multiline_comment = false if !enable_multiline_comments || (comment_char[1][:block_end] && text.end_with?(comment_char[1][:block_end]))
+        in_multiline_comment = false if !multiline_comments || (comment_char[1][:block_end] && text.end_with?(comment_char[1][:block_end]))
       end
 
       # We don't want to add files to the output collection if they don't contain any action items, as they shouldn't be posted in the comment
