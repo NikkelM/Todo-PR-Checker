@@ -221,6 +221,7 @@ helpers do
     current_file = ''
     line_number = 0
     changes = {}
+    print diff
 
     diff_enum = diff.each_line
     line = diff_enum.next rescue nil
