@@ -101,7 +101,7 @@ helpers do
 
     # Get the options for the app from the `.github/config.yml` file in the repository
     app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
-    logger.debug app_options
+    # logger.debug app_options
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
@@ -172,7 +172,7 @@ helpers do
       'case_sensitive' => false,
       'add_languages' => [],
       'ignore_files' => [],
-      `additional_lines` => 0
+      'additional_lines' => 0
     }
 
     accepted_option_values = {
