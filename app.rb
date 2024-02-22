@@ -101,7 +101,7 @@ helpers do
 
     # Get the options for the app from the `.github/config.yml` file in the repository
     app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
-    # logger.debug app_options
+    logger.debug app_options
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
@@ -370,7 +370,7 @@ helpers do
 
       # Sort the changes by their line number, and group those that are close together into one embedded link
       changes.sort_by! { |change| change[:line] }
-      grouped_changes = changes.slice_when { |prev, curr| curr[:line] - prev[:line] > 3 }.to_a
+      grouped_changes = changes.slice_when { |prev, curr| (curr[:line] - prev[:line] > 3) || (curr[:line] - (prev[:line] + additional_lines) > 1) }.to_a
       grouped_changes.each do |group|
         first_line = group.first[:line]
         last_line = group.last[:line]
