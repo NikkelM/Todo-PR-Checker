@@ -19,4 +19,4 @@ todo-pr-checker:
   multiline_comments: false
   # How many lines below found action items should be shown in the embedded code snippet
   # If there are no more lines below the action item before the file ends, the code snippet will not be able to render
-  additional_lines: 2
+  additional_lines: 0
