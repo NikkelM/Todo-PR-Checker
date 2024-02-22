@@ -1,10 +1,14 @@
 # Changelog
 
-## v1.3.2
+## v1.4.0 (Unreleased)
 
 <!--Releasenotes start-->
-- Renamed the `multiline_comments` configuration option.
+- Added a new `additional_lines` configuration option to control how many lines below action items are rendered in code snippets.
 <!--Releasenotes end-->
+
+## v1.3.2
+
+- Renamed the `multiline_comments` configuration option.
 
 ## v1.3.1
 

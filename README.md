@@ -11,7 +11,7 @@
 Do you keep forgetting to resolve that one `// TODO:...` or fix the last ` # Bug...` before merging your Pull Requests?
 
 The Todo PR Checker will make sure that doesn't happen anymore.
-The app checks all code changes in your open Pull Requests for remaining `Todo`, `Fixme` etc. action items in code comments and leaves a comment on the PR with embedded code links to any items that were found.
+The app checks all code changes in your open Pull Requests for remaining `Todo`, `Fixme` etc. action items in code comments and leaves a comment on the PR with embedded code snippets to any items that were found.
 
 This list will update whenever new changes are pushed, so you always know exactly how much work is left.
 
@@ -57,6 +57,7 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 | `add_languages` | `[string[file_type, line_start, block_start, block_end]]`</br>Example: `[['js', '//', '/*', '*,'], ['css', null, '/*', '*/'], ['.py', '#']]`, maximum 10 entries | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a line comment, you must set `line_start` to `null`. If defining `block_start`, `block_end` must also be defined. You may specify up to 10 new file types. *The file types shown in the example are already natively supported by the app.* | `null` |
 | `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. | `false` |
 | `multiline_comments` | `true`, `false` | Whether or not looking for action items in multiline block comments is enabled or not. When enabled, the app *may* incorrectly mark action items in your Pull Request if at least one of the opening or closing line of the block comment (e.g. `*/` and `/*` in JavaScript) are not included in the Pull Request diff, which causes them to not be found by the app. For multiline comments to always work, you must ensure that both the opening and closing characters are included in the diff. Action items located on the first line of a block comment will always be detected, even if this option is disabled. | `false` |
+| `additional_lines` | `integer` between `0` and `10` | The number of additional lines to include below found action items in embedded code snippets. The default of `0` shows only the line with the action item. This setting does not influence the behaviour of showing multiple action items in one snippet if they are located close to each other. *Note that if there are not enough lines left in the file to display, the embedded code snippet will not be able to render at all and will display as a link only.* | `0` |
 
 <details>
 <summary>Expand me to see the currently supported file types:</summary>
