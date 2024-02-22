@@ -22,4 +22,4 @@ todo-pr-checker:
   additional_lines: 0
   # Whether or not each action item should always be rendered in a separate code snippet
   # If disabled, action items that are located close to each other will be rendered in the same code snippet
-  always_split_snippets: false
+  always_split_snippets: true
