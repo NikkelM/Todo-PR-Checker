@@ -5,11 +5,13 @@ todo-pr-checker:
   ignore_files: null
   # What action items should be looked for (setting this will the overwrite default values)
   action_items: ['TODO', 'FIXME', 'BUG']
-  # Languages/file types to add. At least either the line comment or both block comment definitions are required.
-  # If there are no line comments in the language, you may set the value to null.
+  # Languages/file types to add. At least either the line comment or both block comment definitions are required
+  # If there are no line comments in the language, you may set the value to null
+  # The languages shown here are examples and already included in the default configuration
   add_languages: [
     ['js', '//', '/*', '*/'],
     ['css', null, '/*', '*/'],
+    ['php', ['//', '#'], '/*', '*/'],
     ['.py', '#']
   ]
   # Whether or not searching for action items should be case sensitive

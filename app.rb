@@ -181,7 +181,18 @@ helpers do
       'multiline_comments' => ->(value) { [true, false].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
-      'add_languages' => ->(value) { value.is_a?(Array) && (1..10).include?(value.size) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } },
+      # A language may have multiple line characters, defined as an array of strings in second place, or just a string
+      'add_languages' => lambda do |value|
+        value.is_a?(Array) &&
+          (1..10).include?(value.size) &&
+          value.all? do |v|
+            v.is_a?(Array) &&
+              (2..4).include?(v.size) &&
+              v[0].is_a?(String) &&
+              (v.size == 2 || v.size == 4 ? (v[1].is_a?(Array) && v[1].all? { |i| i.is_a?(String) }) || v[1].is_a?(String) : v[1].is_a?(String)) &&
+              (v[2..] || []).all? { |i| i.is_a?(String) || i.nil? }
+          end
+      end,
       # The regex checks if the given input is a valid .gitignore pattern
       'ignore_files' => ->(value) { value.is_a?(Array) && (1..7).include?(value.size) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } },
       'additional_lines' => ->(value) { value.is_a?(Integer) && (0..10).include?(value) },
@@ -291,7 +302,7 @@ helpers do
         on_block_comment_starting_line = comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
 
         # If the line is a comment and contains any action item, add it to the output collection
-        file_todos << line if (text.start_with?(comment_char[1][:line]) || on_block_comment_starting_line || in_multiline_comment) && regexes.any? { |regex| text.match(regex) }
+        file_todos << line if (comment_char[1][:line].any? { |char| text.start_with?(char) } || on_block_comment_starting_line || in_multiline_comment) && regexes.any? { |regex| text.match(regex) }
 
         # Reset the flag if the line ends a block comment
         in_multiline_comment = false if !multiline_comments || (comment_char[1][:block_end] && text.end_with?(comment_char[1][:block_end]))
@@ -307,20 +318,21 @@ helpers do
   # (6) Retrieves the file types and comment characters for the app's supported languages, and user defined values
   def get_comment_chars(added_languages)
     default_comment_chars = {
-      %w[md html xml] => { line: '<!--', block_start: '<!--', block_end: '-->' },
-      %w[astro] => { line: '//', block_start: '<!--', block_end: '-->' },
-      %w[js java ts c cpp cs php swift go kt rs dart sc groovy less sass scss] => { line: '//', block_start: '/*', block_end: '*/' },
-      %w[css] => { line: '/*', block_start: '/*', block_end: '*/' },
-      %w[r gitignore sh bash yml yaml] => { line: '#', block_start: nil, block_end: nil },
-      %w[rb] => { line: '#', block_start: '=begin', block_end: '=end' },
-      %w[pl] => { line: '#', block_start: '=', block_end: '=cut' },
-      %w[py] => { line: '#', block_start: "'''", block_end: "'''" },
-      %w[ps1] => { line: '#', block_start: '<#', block_end: '#>' },
-      %w[sql] => { line: '--', block_start: '/*', block_end: '*/' },
-      %w[hs] => { line: '--', block_start: '{-', block_end: '-}' },
-      %w[lua] => { line: '--', block_start: '--[[', block_end: ']]' },
-      %w[m] => { line: '%', block_start: '%{', block_end: '%}' },
-      %w[tex] => { line: '%', block_start: nil, block_end: nil }
+      %w[md html xml] => { line: ['<!--'], block_start: '<!--', block_end: '-->' },
+      %w[astro] => { line: ['//'], block_start: '<!--', block_end: '-->' },
+      %w[js java ts c cpp cs swift go kt rs dart sc groovy less sass scss] => { line: ['//'], block_start: '/*', block_end: '*/' },
+      %w[php] => { line: ['//', '#'], block_start: '/*', block_end: '*/' },
+      %w[css] => { line: ['/*'], block_start: '/*', block_end: '*/' },
+      %w[r gitignore sh bash yml yaml] => { line: ['#'], block_start: nil, block_end: nil },
+      %w[rb] => { line: ['#'], block_start: '=begin', block_end: '=end' },
+      %w[pl] => { line: ['#'], block_start: '=', block_end: '=cut' },
+      %w[py] => { line: ['#'], block_start: "'''", block_end: "'''" },
+      %w[ps1] => { line: ['#'], block_start: '<#', block_end: '#>' },
+      %w[sql] => { line: ['--'], block_start: '/*', block_end: '*/' },
+      %w[hs] => { line: ['--'], block_start: '{-', block_end: '-}' },
+      %w[lua] => { line: ['--'], block_start: '--[[', block_end: ']]' },
+      %w[m] => { line: ['%'], block_start: '%{', block_end: '%}' },
+      %w[tex] => { line: ['%'], block_start: nil, block_end: nil }
     }
 
     unwrapped_comment_chars = {}
@@ -332,15 +344,17 @@ helpers do
 
     added_languages.each do |lang|
       file_type = lang[0].sub(/^\./, '')
+      line_chars = lang[1].is_a?(Array) ? lang[1] : [lang[1]]
       # The length of lang defines which permutation is given by the user
       # Users may overwrite the default comment characters for a file type
       case lang.length
       when 2
-        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: nil, block_end: nil }
+        unwrapped_comment_chars[file_type] = { line: line_chars, block_start: nil, block_end: nil }
       when 3
-        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[1], block_end: lang[2] }
+        # If only the block comment was defined, we need to extract the character from the array entry when setting the block start character, as it was parsed to an array earlier
+        unwrapped_comment_chars[file_type] = { line: line_chars, block_start: line_chars[0], block_end: lang[2] }
       when 4
-        unwrapped_comment_chars[file_type] = { line: lang[1], block_start: lang[2], block_end: lang[3] }
+        unwrapped_comment_chars[file_type] = { line: line_chars, block_start: lang[2], block_end: lang[3] }
       end
     end
 
