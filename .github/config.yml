@@ -5,11 +5,13 @@ todo-pr-checker:
   ignore_files: null
   # What action items should be looked for (setting this will the overwrite default values)
   action_items: ['TODO', 'FIXME', 'BUG']
-  # Languages/file types to add. At least either the line comment or both block comment definitions are required.
-  # If there are no line comments in the language, you may set the value to null.
+  # Languages/file types to add. At least either the line comment or both block comment definitions are required
+  # If there are no line comments in the language, you may set the value to null
+  # The languages shown here are examples and already included in the default configuration
   add_languages: [
     ['js', '//', '/*', '*/'],
     ['css', null, '/*', '*/'],
+    ['php', ['//', '#'], '/*', '*/'],
     ['.py', '#']
   ]
   # Whether or not searching for action items should be case sensitive
@@ -19,7 +21,7 @@ todo-pr-checker:
   multiline_comments: false
   # How many lines below found action items should be shown in the embedded code snippet
   # If there are no more lines below the action item before the file ends, the code snippet will not be able to render
-  additional_lines: 0
+  additional_lines: 1
   # Whether or not each action item should always be rendered in a separate code snippet
   # If disabled, action items that are located close to each other will be rendered in the same code snippet
   always_split_snippets: false

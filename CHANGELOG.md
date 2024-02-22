@@ -5,6 +5,7 @@
 <!--Releasenotes start-->
 - Added a new `additional_lines` configuration option to control how many lines below action items are rendered in code snippets.
 - Added a new `always_split_snippets` configuration option to control whether or not action items should always be rendered in seperate code snippets, even when they are located close to each other in code.
+- The app now supports multiple line comment types for languages that have them, such as `//` and `#` for PHP.
 <!--Releasenotes end-->
 
 ## v1.3.2
