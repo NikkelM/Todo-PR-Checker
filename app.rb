@@ -376,7 +376,7 @@ helpers do
       # Sort the changes by their line number, and group those that are close together into one embedded link
       changes.sort_by! { |change| change[:line] }
       if always_split_snippets
-        grouped_changes = changes
+        grouped_changes = changes.map { |change| [change] }
       else
         grouped_changes = changes.slice_when { |prev, curr| (curr[:line] - prev[:line] > 3) && (curr[:line] - (prev[:line] + additional_lines) > 1) }.to_a
       end
