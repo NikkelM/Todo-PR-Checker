@@ -370,7 +370,7 @@ helpers do
 
       # Sort the changes by their line number, and group those that are close together into one embedded link
       changes.sort_by! { |change| change[:line] }
-      grouped_changes = changes.slice_when { |prev, curr| (curr[:line] - prev[:line] > 3) && (curr[:line] - (prev[:line] + additional_lines) > 1) }.to_a
+      grouped_changes = changes.slice_when { |prev, curr| curr[:line] - (prev[:line] + additional_lines) > 3 }.to_a
       grouped_changes.each do |group|
         first_line = group.first[:line]
         last_line = group.last[:line]
