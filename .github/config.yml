@@ -10,7 +10,7 @@ todo-pr-checker:
   # The languages shown here are examples and already included in the default configuration
   add_languages: [
     ['js', '//', '/*', '*/'],
-    ['css', '/*', '*/'],
+    ['css', null, '/*', '*/'],
     ['php', ['//', '#'], '/*', '*/'],
     ['.py', '#']
   ]
