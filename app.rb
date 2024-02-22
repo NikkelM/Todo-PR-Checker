@@ -117,7 +117,7 @@ helpers do
     if todo_changes.any?
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
-        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, app_options['additional_lines']).values_at(:title, :summary, :body)
+        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, app_options).values_at(:title, :summary, :body)
 
         # Post or update the comment with the found action items
         if app_comment
@@ -172,7 +172,8 @@ helpers do
       'case_sensitive' => false,
       'add_languages' => [],
       'ignore_files' => [],
-      'additional_lines' => 0
+      'additional_lines' => 0,
+      'always_split_snippets' => false
     }
 
     accepted_option_values = {
@@ -183,7 +184,8 @@ helpers do
       'add_languages' => ->(value) { value.is_a?(Array) && (1..10).include?(value.size) && value.all? { |v| v.is_a?(Array) && (2..4).include?(v.size) && v.all? { |i| i.is_a?(String) || i.nil? } } },
       # The regex checks if the given input is a valid .gitignore pattern
       'ignore_files' => ->(value) { value.is_a?(Array) && (1..7).include?(value.size) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } },
-      'additional_lines' => ->(value) { value.is_a?(Integer) && (0..10).include?(value) }
+      'additional_lines' => ->(value) { value.is_a?(Integer) && (0..10).include?(value) },
+      'always_split_snippets' => ->(value) { [true, false].include?(value) }
     }
 
     file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha) rescue nil
@@ -345,7 +347,10 @@ helpers do
   end
 
   # (7) Creates a comment text from the found action items, with embedded links to the relevant lines
-  def create_pr_comment_from_changes(todo_changes, full_repo_name, additional_lines)
+  def create_pr_comment_from_changes(todo_changes, full_repo_name, app_options)
+    additional_lines = app_options['additional_lines']
+    always_split_snippets = app_options['always_split_snippets']
+
     number_of_todos = todo_changes.values.flatten.count
     check_run_title = if number_of_todos == 1
                         '✘ 1 unresolved action item found!'
@@ -370,7 +375,12 @@ helpers do
 
       # Sort the changes by their line number, and group those that are close together into one embedded link
       changes.sort_by! { |change| change[:line] }
-      grouped_changes = changes.slice_when { |prev, curr| (curr[:line] - prev[:line] > 3) && (curr[:line] - (prev[:line] + additional_lines) > 1) }.to_a
+      if always_split_snippets
+        grouped_changes = changes.map { |change| [change] }
+      else
+        grouped_changes = changes.slice_when { |prev, curr| (curr[:line] - prev[:line] > 3) && (curr[:line] - (prev[:line] + additional_lines) > 1) }.to_a
+      end
+
       grouped_changes.each do |group|
         first_line = group.first[:line]
         last_line = group.last[:line]
