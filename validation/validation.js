@@ -2,7 +2,7 @@
 let a = "todo"; 
 //TODO: Alert 
 let b = "todo"; 
-// TODO Alert 
+// TODO Alert
 let c = "todo"; 
 /* TODO: Alert */ 
 let d = "todo"; 
