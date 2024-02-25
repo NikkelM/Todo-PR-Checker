@@ -106,7 +106,7 @@ helpers do
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes, ignored_files = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
     ignored_files_string = if ignored_files.empty?
-                             "\n"
+                             ''
                            else
                              "\n\nSome changed files were ignored due to your settings: #{ignored_files.map { |file| "[`#{file}`](https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file})" }.join(', ')}\n"
                            end
@@ -162,7 +162,7 @@ helpers do
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'success',
-        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.#{ignored_files_string}#{comment_footer}" },
+        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.\n#{ignored_files_string}#{comment_footer}" },
         accept: 'application/vnd.github+json'
       )
     end
