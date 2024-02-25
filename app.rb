@@ -103,15 +103,32 @@ helpers do
     app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
     # logger.debug app_options
 
+    comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
+
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
-    changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
+    changes, ignored_files = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
+    ignored_files_string = if ignored_files.empty?
+                             ''
+                           else
+                             "\n\nSome changed files were ignored due to your settings: #{ignored_files.map { |file| "[`#{file}`](https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file})" }.join(', ')}\n"
+                           end
+    # If there are no changes, mark the run as skipped and return early
+    if changes.empty?
+      @installation_client.update_check_run(
+        full_repo_name, check_run_id,
+        status: 'completed',
+        conclusion: 'skipped',
+        output: { title: '✔ No changed files found!', summary: "No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.\n#{ignored_files_string}#{comment_footer}" },
+        accept: 'application/vnd.github+json'
+      )
+      return
+    end
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes = check_for_todos(changes, app_options)
 
     # If the app has previously created a comment on the Pull Request, fetch it
     app_comment = fetch_app_comment(full_repo_name, pull_number)
-    comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
@@ -121,14 +138,13 @@ helpers do
 
         # Post or update the comment with the found action items
         if app_comment
-          @installation_client.update_comment(full_repo_name, app_comment.id, comment_summary + comment_body + comment_footer, accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_summary}#{comment_body}#{comment_footer}", accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, comment_summary + comment_body + comment_footer, accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_summary}#{comment_body}#{comment_footer}", accept: 'application/vnd.github+json')
         end
       end
-
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: comment_body + comment_footer }, accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: "#{comment_body}#{ignored_files_string}#{comment_footer}" }, accept: 'application/vnd.github+json')
     else
       comment_header = '✔ No action items found!'
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
@@ -136,9 +152,9 @@ helpers do
       if app_comment || app_options['post_comment'] == 'always'
         if app_comment
           comment_header = '✔ All action items have been resolved!'
-          @installation_client.update_comment(full_repo_name, app_comment.id, comment_header + comment_footer, accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_header}#{comment_footer}", accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, comment_header + comment_footer, accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_header}#{comment_footer}", accept: 'application/vnd.github+json')
         end
       end
 
@@ -147,7 +163,7 @@ helpers do
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'success',
-        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.\n#{comment_footer}" },
+        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.\n#{ignored_files_string}#{comment_footer}" },
         accept: 'application/vnd.github+json'
       )
     end
@@ -232,6 +248,7 @@ helpers do
     current_file = ''
     line_number = 0
     changes = {}
+    ignored_files = []
 
     diff_enum = diff.each_line
     line = diff_enum.next rescue nil
@@ -242,6 +259,7 @@ helpers do
         while line&.start_with?('+++')
           current_file = line[6..].strip
           if ignore_files_regex.any? { |pattern| pattern.match?(current_file) }
+            ignored_files << current_file
             loop do
               line = diff_enum.next rescue nil
               break if line.nil? || line.start_with?('+++')
@@ -262,7 +280,7 @@ helpers do
       line = diff_enum.next rescue nil
     end
 
-    changes
+    [changes, ignored_files]
   end
 
   # (5) Checks changed lines in supported file types for action items in code comments ("Todos")
