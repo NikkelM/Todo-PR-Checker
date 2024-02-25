@@ -1,11 +1,13 @@
 # Changelog
 
-## v1.4.0 (Unreleased)
+## v1.4.0
 
 <!--Releasenotes start-->
 - Added a new `additional_lines` configuration option to control how many lines below action items are rendered in code snippets.
 - Added a new `always_split_snippets` configuration option to control whether or not action items should always be rendered in seperate code snippets, even when they are located close to each other in code.
 - The app now supports multiple line comment types for languages that have them, such as `//` and `#` for PHP.
+- The check run initiated by the app will now be marked as skipped if no checkable changed files are found in the Pull Request.
+- The check run summary will now include a list of skipped files.
 <!--Releasenotes end-->
 
 ## v1.3.2
