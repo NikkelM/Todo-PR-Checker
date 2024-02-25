@@ -2,7 +2,8 @@ todo-pr-checker:
   # When should comments be posted? 
   post_comment: 'items_found'
   # Files that get matched by any of these regular expressions will be ignored
-  ignore_files: ['config.yml']
+  # TODO: Reset this to the default value
+  ignore_files: ['validation.php']
   # What action items should be looked for (setting this will the overwrite default values)
   action_items: ['TODO', 'FIXME', 'BUG']
   # Languages/file types to add. At least either the line comment or both block comment definitions are required
