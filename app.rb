@@ -108,7 +108,7 @@ helpers do
     ignored_files_string = if ignored_files.empty?
                              "\n"
                            else
-                             "\nSome changed files were ignored due to your settings: #{ignored_files.map { |file| "[`#{file}`](https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file})" }.join(', ')}\n"
+                             "\n\nSome changed files were ignored due to your settings: #{ignored_files.map { |file| "[`#{file}`](https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file})" }.join(', ')}\n"
                            end
     # If there are no changes, mark the run as skipped and return early
     if changes.empty?
@@ -151,9 +151,9 @@ helpers do
       if app_comment || app_options['post_comment'] == 'always'
         if app_comment
           comment_header = '✔ All action items have been resolved!'
-          @installation_client.update_comment(full_repo_name, app_comment.id, comment_header + comment_footer, accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_header}#{ignored_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, comment_header + comment_footer, accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_header}#{ignored_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
         end
       end
 
