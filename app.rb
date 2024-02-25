@@ -105,7 +105,17 @@ helpers do
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
-    print changes
+    # If there are no changes, mark the run as skipped and return early
+    if changes.empty?
+      @installation_client.update_check_run(
+        full_repo_name, check_run_id,
+        status: 'completed',
+        conclusion: 'skipped',
+        output: { title: '✔ No changes found!', summary: 'No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.' },
+        accept: 'application/vnd.github+json'
+      )
+      return
+    end
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes = check_for_todos(changes, app_options)
