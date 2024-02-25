@@ -116,7 +116,7 @@ helpers do
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'skipped',
-        output: { title: '✔ No changed files found!', summary: 'No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.', text: ignored_files_string },
+        output: { title: '✔ No changed files found!', summary: "No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.\n#{ignored_files_string}#{comment_footer}" },
         accept: 'application/vnd.github+json'
       )
       return
