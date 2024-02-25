@@ -105,6 +105,7 @@ helpers do
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
+    print changes
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes = check_for_todos(changes, app_options)
