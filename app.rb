@@ -105,13 +105,15 @@ helpers do
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes, ignored_files = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
+    ignored_files_string = ignored_files.map { |file| "`#{file}`" }.join(', ')
     # If there are no changes, mark the run as skipped and return early
+    # TODO: Add the ignored files to the output properly, maybe construct the string differently
     if changes.empty?
       @installation_client.update_check_run(
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'skipped',
-        output: { title: '✔ No changed files found!', summary: 'No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.' },
+        output: { title: '✔ No changed files found!', summary: 'No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.', text: "The following files were ignored: #{ignored_files_string}" },
         accept: 'application/vnd.github+json'
       )
       return
@@ -137,8 +139,8 @@ helpers do
           @installation_client.add_comment(full_repo_name, pull_number, comment_summary + comment_body + comment_footer, accept: 'application/vnd.github+json')
         end
       end
-      # TODO: Test
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
+      # TODO: Add the ignored files to the output
       @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: comment_body + comment_footer }, accept: 'application/vnd.github+json')
     else
       comment_header = '✔ No action items found!'
@@ -154,6 +156,7 @@ helpers do
       end
 
       # Mark the check run as successful, as no action items were found
+      # TODO: Add the ignored files to the output
       @installation_client.update_check_run(
         full_repo_name, check_run_id,
         status: 'completed',
