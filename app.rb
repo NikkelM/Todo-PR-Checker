@@ -104,7 +104,7 @@ helpers do
     # logger.debug app_options
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
-    changes = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
+    changes, ignored_files = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
     # If there are no changes, mark the run as skipped and return early
     if changes.empty?
       @installation_client.update_check_run(
@@ -137,7 +137,7 @@ helpers do
           @installation_client.add_comment(full_repo_name, pull_number, comment_summary + comment_body + comment_footer, accept: 'application/vnd.github+json')
         end
       end
-
+      # TODO: Test
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
       @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: comment_body + comment_footer }, accept: 'application/vnd.github+json')
     else
@@ -243,6 +243,7 @@ helpers do
     current_file = ''
     line_number = 0
     changes = {}
+    ignored_files = []
 
     diff_enum = diff.each_line
     line = diff_enum.next rescue nil
@@ -253,6 +254,7 @@ helpers do
         while line&.start_with?('+++')
           current_file = line[6..].strip
           if ignore_files_regex.any? { |pattern| pattern.match?(current_file) }
+            ignored_files << current_file
             loop do
               line = diff_enum.next rescue nil
               break if line.nil? || line.start_with?('+++')
@@ -273,7 +275,7 @@ helpers do
       line = diff_enum.next rescue nil
     end
 
-    changes
+    [changes, ignored_files]
   end
 
   # (5) Checks changed lines in supported file types for action items in code comments ("Todos")
