@@ -133,17 +133,17 @@ helpers do
     if todo_changes.any?
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
-        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, app_options, ignored_files_string).values_at(:title, :summary, :body)
+        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, app_options).values_at(:title, :summary, :body)
 
         # Post or update the comment with the found action items
         if app_comment
-          @installation_client.update_comment(full_repo_name, app_comment.id, comment_summary + comment_body + comment_footer, accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_summary}#{comment_body}#{comment_footer}", accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, comment_summary + comment_body + comment_footer, accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_summary}#{comment_body}#{comment_footer}", accept: 'application/vnd.github+json')
         end
       end
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: "#{comment_body}#{comment_footer}" }, accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: "#{comment_body}#{ignored_files_string}#{comment_footer}" }, accept: 'application/vnd.github+json')
     else
       comment_header = '✔ No action items found!'
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
@@ -151,9 +151,9 @@ helpers do
       if app_comment || app_options['post_comment'] == 'always'
         if app_comment
           comment_header = '✔ All action items have been resolved!'
-          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_header}#{ignored_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_header}#{comment_footer}", accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_header}#{ignored_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_header}#{comment_footer}", accept: 'application/vnd.github+json')
         end
       end
 
@@ -378,7 +378,7 @@ helpers do
   end
 
   # (7) Creates a comment text from the found action items, with embedded links to the relevant lines
-  def create_pr_comment_from_changes(todo_changes, full_repo_name, app_options, ignored_files_string)
+  def create_pr_comment_from_changes(todo_changes, full_repo_name, app_options)
     additional_lines = app_options['additional_lines']
     always_split_snippets = app_options['always_split_snippets']
 
@@ -422,8 +422,6 @@ helpers do
                         end
       end
     end
-
-    comment_body += ignored_files_string
 
     { title: check_run_title, summary: comment_summary, body: comment_body }
   end
