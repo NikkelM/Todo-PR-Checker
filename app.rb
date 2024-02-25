@@ -103,6 +103,8 @@ helpers do
     app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
     # logger.debug app_options
 
+    comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
+
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes, ignored_files = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
     ignored_files_string = if ignored_files.empty?
@@ -127,7 +129,6 @@ helpers do
 
     # If the app has previously created a comment on the Pull Request, fetch it
     app_comment = fetch_app_comment(full_repo_name, pull_number)
-    comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
