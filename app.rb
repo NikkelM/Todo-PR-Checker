@@ -105,15 +105,18 @@ helpers do
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes, ignored_files = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
-    ignored_files_string = ignored_files.map { |file| "`#{file}`" }.join(', ')
+    ignored_files_string = if ignored_files.empty?
+                             "\n"
+                           else
+                             "\nSome changed files were ignored due to your settings: #{ignored_files.map { |file| "[`#{file}`](https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file})" }.join(', ')}\n"
+                           end
     # If there are no changes, mark the run as skipped and return early
-    # TODO: Add the ignored files to the output properly, maybe construct the string differently
     if changes.empty?
       @installation_client.update_check_run(
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'skipped',
-        output: { title: '✔ No changed files found!', summary: 'No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.', text: "The following files were ignored: #{ignored_files_string}" },
+        output: { title: '✔ No changed files found!', summary: 'No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.', text: ignored_files_string },
         accept: 'application/vnd.github+json'
       )
       return
@@ -130,7 +133,7 @@ helpers do
     if todo_changes.any?
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
-        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, app_options).values_at(:title, :summary, :body)
+        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, app_options, ignored_files_string).values_at(:title, :summary, :body)
 
         # Post or update the comment with the found action items
         if app_comment
@@ -140,8 +143,7 @@ helpers do
         end
       end
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      # TODO: Add the ignored files to the output
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: comment_body + comment_footer }, accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: "#{comment_body}#{comment_footer}" }, accept: 'application/vnd.github+json')
     else
       comment_header = '✔ No action items found!'
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
@@ -156,12 +158,11 @@ helpers do
       end
 
       # Mark the check run as successful, as no action items were found
-      # TODO: Add the ignored files to the output
       @installation_client.update_check_run(
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'success',
-        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.\n#{comment_footer}" },
+        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.#{ignored_files_string}#{comment_footer}" },
         accept: 'application/vnd.github+json'
       )
     end
@@ -377,7 +378,7 @@ helpers do
   end
 
   # (7) Creates a comment text from the found action items, with embedded links to the relevant lines
-  def create_pr_comment_from_changes(todo_changes, full_repo_name, app_options)
+  def create_pr_comment_from_changes(todo_changes, full_repo_name, app_options, ignored_files_string)
     additional_lines = app_options['additional_lines']
     always_split_snippets = app_options['always_split_snippets']
 
@@ -421,6 +422,8 @@ helpers do
                         end
       end
     end
+
+    comment_body += ignored_files_string
 
     { title: check_run_title, summary: comment_summary, body: comment_body }
   end
