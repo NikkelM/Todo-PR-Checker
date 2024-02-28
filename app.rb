@@ -188,7 +188,7 @@ helpers do
       'case_sensitive' => false,
       'add_languages' => [],
       'ignore_files' => [],
-      'additional_lines' => 0,
+      'additional_lines' => 1,
       'always_split_snippets' => false
     }
 

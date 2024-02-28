@@ -1,7 +1,7 @@
 todo-pr-checker:
   # When should comments be posted? 
   post_comment: 'items_found'
-  # Files that get matched by any of these regular expressions will be ignored
+  # Files that get matched by any of these glob patterns will be ignored
   ignore_files: null
   # What action items should be looked for (setting this will the overwrite default values)
   action_items: ['TODO', 'FIXME', 'BUG']
@@ -14,14 +14,14 @@ todo-pr-checker:
     ['php', ['//', '#'], '/*', '*/'],
     ['.py', '#']
   ]
+  # How many lines below found action items should be shown in the embedded code snippet
+  # If there are no more lines below the action item before the file ends, the code snippet will not be able to render
+  additional_lines: 1
   # Whether or not searching for action items should be case sensitive
   case_sensitive: false
   # If multiline comments should also be searched for action items
   # This may result in some false positives or negatives if the opening or closing lines of a comment are not in the diff 
   multiline_comments: false
-  # How many lines below found action items should be shown in the embedded code snippet
-  # If there are no more lines below the action item before the file ends, the code snippet will not be able to render
-  additional_lines: 1
   # Whether or not each action item should always be rendered in a separate code snippet
   # If disabled, action items that are located close to each other will be rendered in the same code snippet
   always_split_snippets: false
