@@ -23,7 +23,7 @@ GEM
     public_suffix (5.0.4)
     puma (6.4.3)
       nio4r (~> 2.0)
-    rack (2.2.12)
+    rack (2.2.13)
     rack-protection (2.2.4)
       rack
     rchardet (1.8.0)
