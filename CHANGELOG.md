@@ -1,10 +1,14 @@
 # Changelog
 
-## v1.4.1
+## v1.4.2
 
 <!--Releasenotes start-->
-- Fixed the default value of the `additional_lines` configuration option not being set to 1.
+- Fixed the app not being able to run on PRs with more than 300 changed files.
 <!--Releasenotes end-->
+
+## v1.4.1
+
+- Fixed the default value of the `additional_lines` configuration option not being set to 1.
 
 ## v1.4.0
 
