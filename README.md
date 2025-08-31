@@ -42,6 +42,7 @@ To configure options, add a `todo-pr-checker` key at the top-level of your `.git
 ```yaml
 todo-pr-checker:
   post_comment: 'items_found'
+  ignore_files: ['testFolder/', '*.js']
   (...)
 ```
 

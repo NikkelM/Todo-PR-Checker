@@ -236,8 +236,6 @@ helpers do
 
   # (4) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
   def get_pull_request_changes(full_repo_name, pull_number, ignore_files_regex)
-    diff = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github.diff')
-
     ignore_files_regex.map! do |pattern|
       pattern.gsub!('.', '\.')
       pattern.gsub!('*', '.*')
@@ -245,39 +243,43 @@ helpers do
       Regexp.new(pattern)
     end
 
-    current_file = ''
-    line_number = 0
     changes = {}
     ignored_files = []
 
-    diff_enum = diff.each_line
-    line = diff_enum.next rescue nil
+    # Paginate through all files in the pull request
+    page = 1
+    per_page = 100
     loop do
-      break if line.nil?
+      files = @installation_client.pull_request_files(full_repo_name, pull_number, per_page: per_page, page: page)
+      break if files.empty?
 
-      if line.start_with?('+++')
-        while line&.start_with?('+++')
-          current_file = line[6..].strip
-          if ignore_files_regex.any? { |pattern| pattern.match?(current_file) }
-            ignored_files << current_file
-            loop do
-              line = diff_enum.next rescue nil
-              break if line.nil? || line.start_with?('+++')
-            end
-          else
-            changes[current_file] = []
-            break
+      files.each do |file|
+        filename = file.filename
+        if ignore_files_regex.any? { |pattern| pattern.match?(filename) }
+          ignored_files << filename
+          next
+        end
+
+        changes[filename] = []
+        # Parse the patch to get added lines and their line numbers
+        next unless file.patch
+        line_number = 0
+        file.patch.each_line do |line|
+          if line.start_with?('@@')
+            # Extract the new file's starting line number from the hunk header
+            # Example: @@ -1,6 +1,7 @@
+            m = line.match(/\+([0-9]+)/)
+            line_number = m ? m[1].to_i - 1 : line_number
+          elsif line.start_with?('+') && !line.start_with?('+++')
+            changes[filename] << { line: line_number, text: line[1..] }
+            line_number += 1
+          elsif !line.start_with?('-') && !line.chomp.eql?('\ No newline at end of file')
+            line_number += 1
           end
         end
-        break if line.nil?
-      elsif line.start_with?('+')
-        changes[current_file] << { line: line_number, text: line[1..] }
-      elsif line.start_with?('@@')
-        line_number = line.split()[2].split(',')[0].to_i - 1
       end
 
-      line_number += 1 unless line.start_with?('-') || line.chomp == '\ No newline at end of file'
-      line = diff_enum.next rescue nil
+      page += 1
     end
 
     [changes, ignored_files]
