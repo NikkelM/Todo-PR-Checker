@@ -1,10 +1,15 @@
 # Changelog
 
-## v1.4.2
+## v1.4.3
 
 <!--Releasenotes start-->
-- Fixed the app not being able to run on PRs with more than 300 changed files.
+- Bumped a number of dependencies to their latest versions.
+- Fixed some mistakes in the Readme.
 <!--Releasenotes end-->
+
+## v1.4.2
+
+- Fixed the app not being able to run on PRs with more than 300 changed files.
 
 ## v1.4.1
 
