@@ -13,7 +13,7 @@ GEM
     git (1.19.1)
       addressable (~> 2.8)
       rchardet (~> 1.8)
-    json (2.18.1)
+    json (2.19.2)
     jwt (2.7.1)
     logger (1.7.0)
     mustermann (2.0.2)
