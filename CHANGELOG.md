@@ -1,11 +1,16 @@
 # Changelog
 
-## v1.4.3
+## v1.4.4
 
 <!--Releasenotes start-->
+- Fixed an issue with Github having deprecated a request authentication header the App used for webhook validation.
+- Bumped a number of dependencies to their latest versions.
+<!--Releasenotes end-->
+
+## v1.4.3
+
 - Bumped a number of dependencies to their latest versions.
 - Fixed some mistakes in the Readme.
-<!--Releasenotes end-->
 
 ## v1.4.2
 

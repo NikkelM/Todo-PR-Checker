@@ -473,10 +473,10 @@ helpers do
 
   # Boilerplate code to verify the signature of the webhook received from GitHub
   def verify_webhook_signature
-    their_signature_header = request.env['HTTP_X_HUB_SIGNATURE'] || 'sha1='
+    their_signature_header = request.env['HTTP_X_HUB_SIGNATURE_256'] || 'sha256='
     method, their_digest = their_signature_header.split('=')
     our_digest = OpenSSL::HMAC.hexdigest(method, GITHUB_WEBHOOK_SECRET, @payload_raw)
-    halt 401 unless their_digest == our_digest
+    halt 401 unless Rack::Utils.secure_compare(their_digest, our_digest)
 
     logger.debug "---- received event #{request.env['HTTP_X_GITHUB_EVENT']}"
     logger.debug "----    action #{@payload['action']}" unless @payload['action'].nil?
