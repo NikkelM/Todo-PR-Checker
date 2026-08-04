@@ -357,6 +357,116 @@ class DefaultValidationFixtureTest < Minitest::Test
   end
 end
 
+class ActionItemMatchingOptionsTest < Minitest::Test
+  def setup
+    @scanner = Sinatra::Application.new!
+    @config_file = Struct.new(:content).new(Base64.strict_encode64("todo-pr-checker: {}\n"))
+    config_file = @config_file
+    installation_client = Object.new
+    installation_client.define_singleton_method(:contents) { |*| config_file }
+    @scanner.instance_variable_set(:@installation_client, installation_client)
+    @default_options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+  end
+
+  def test_default_matching_options_preserve_existing_behavior
+    assert_equal false, @default_options['check_inline_comments']
+    assert_equal false, @default_options['standalone_items']
+    assert_equal [1, 3, 5, 7, 9, 10, 14, 20], scan_fixture('validation.js', @default_options)
+    assert_equal [1, 5, 7, 11], scan_fixture('validation.html', @default_options)
+  end
+
+  def test_check_inline_comments_true_includes_inline_comments
+    options = @default_options.merge('check_inline_comments' => true)
+
+    assert_equal [1, 3, 5, 7, 9, 10, 14, 16, 20], scan_fixture('validation.js', options)
+    assert_equal [1, 5, 7, 9, 11], scan_fixture('validation.html', options)
+  end
+
+  def test_standalone_items_true_excludes_punctuation_adjacent_items
+    options = @default_options.merge('standalone_items' => true)
+
+    assert_equal [5], scan_fixture('validation.js', options)
+    assert_equal [5, 7, 11], scan_fixture('validation.html', options)
+  end
+
+  def test_combined_options_detect_only_whitespace_delimited_inline_items
+    changes = {
+      'example.js' => [
+        { line: 1, text: 'const first = true; // TODO fix this' },
+        { line: 2, text: 'const second = true; // TODO: fix this' },
+        { line: 3, text: 'const third = true; /* FIXME later */' },
+        { line: 4, text: 'const fourth = true; /* (FIXME) */' },
+        { line: 5, text: 'const fifth = true; //TODO fix this' }
+      ]
+    }
+    options = @default_options.merge('check_inline_comments' => true, 'standalone_items' => true)
+
+    todo_changes, = @scanner.send(:check_for_todos, changes, options)
+
+    assert_equal [1, 3], todo_changes.fetch('example.js').map { |change| change[:line] }
+  end
+
+  def test_inline_multiline_comment_continues_on_following_lines
+    changes = {
+      'example.js' => [
+        { line: 1, text: 'const value = true; /* start' },
+        { line: 2, text: 'TODO fix this' },
+        { line: 3, text: '*/' }
+      ]
+    }
+    options = @default_options.merge('check_inline_comments' => true)
+
+    todo_changes, = @scanner.send(:check_for_todos, changes, options)
+
+    assert_equal [2], todo_changes.fetch('example.js').map { |change| change[:line] }
+  end
+
+  def test_inline_self_closing_block_comment_does_not_leak_to_following_lines
+    changes = {
+      'example.js' => [
+        { line: 1, text: 'const first = true; /* TODO */ const second = true;' },
+        { line: 2, text: 'FIXME is code, not a comment' }
+      ]
+    }
+    options = @default_options.merge('check_inline_comments' => true)
+
+    todo_changes, = @scanner.send(:check_for_todos, changes, options)
+
+    assert_equal [1], todo_changes.fetch('example.js').map { |change| change[:line] }
+  end
+
+  def test_configuration_accepts_boolean_matching_options
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  check_inline_comments: true\n  standalone_items: true\n")
+
+    options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+
+    assert_equal true, options['check_inline_comments']
+    assert_equal true, options['standalone_items']
+  end
+
+  def test_invalid_matching_options_use_defaults
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  check_inline_comments: inline\n  standalone_items: whitespace\n")
+
+    options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+
+    assert_equal false, options['check_inline_comments']
+    assert_equal false, options['standalone_items']
+  end
+
+  private
+
+  def scan_fixture(file_name, options)
+    fixture_path = File.expand_path("../validation/#{file_name}", __dir__)
+    changes = {
+      file_name => File.readlines(fixture_path, chomp: true).each_with_index.map do |text, index|
+        { line: index + 1, text: text }
+      end
+    }
+    todo_changes, = @scanner.send(:check_for_todos, changes, options)
+    todo_changes.fetch(file_name, []).map { |change| change[:line] }
+  end
+end
+
 class UncheckedFilesReportingTest < Minitest::Test
   def setup
     @calls = []
