@@ -24,7 +24,7 @@ GITHUB_PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV.fetch('GITHUB_PRIVATE_KEY', nil)
 GITHUB_WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
 APP_IDENTIFIER = ENV.fetch('GITHUB_APP_IDENTIFIER', nil)
 APP_FRIENDLY_NAME = ENV.fetch('APP_FRIENDLY_NAME', 'Todo PR Checker')
-RELEVANT_PULL_REQUEST_ACTIONS = %w[opened synchronize reopened].freeze
+RELEVANT_PULL_REQUEST_ACTIONS = %w[opened synchronize reopened ready_for_review].freeze
 MAX_REPORTED_UNCHECKED_FILES = 50
 
 configure :development do
@@ -50,13 +50,24 @@ post '/' do
   authenticate_app
   authenticate_installation(@payload)
 
+  app_options = nil
+  if event_context[:type] == :pull_request && event_context[:draft]
+    app_options = get_app_options(event_context[:full_repo_name], event_context[:head_sha])
+    unless app_options['check_drafts']
+      logger.debug 'Skipping draft Pull Request because check_drafts is disabled.'
+      return 204
+    end
+  end
+
   check_run = create_check_run(event_context[:full_repo_name], event_context[:head_sha])
-  initiate_check_run(
+  check_arguments = {
     full_repo_name: event_context[:full_repo_name],
     pull_number: event_context[:pull_number],
     head_sha: event_context[:head_sha],
     check_run_id: check_run.id
-  )
+  }
+  check_arguments[:app_options] = app_options if app_options
+  initiate_check_run(**check_arguments)
 
   200
 end
@@ -75,7 +86,8 @@ helpers do
         type: :pull_request,
         full_repo_name: payload['repository']['full_name'],
         pull_number: pull_request['number'],
-        head_sha: pull_request.dig('head', 'sha')
+        head_sha: pull_request.dig('head', 'sha'),
+        draft: pull_request['draft'] == true
       }
     when 'check_run'
       check_run = payload['check_run']
@@ -128,12 +140,12 @@ helpers do
   end
 
   # (2) Contains the main logic of the app, checking and reporting on action items in code comments during a CI check
-  def initiate_check_run(full_repo_name:, pull_number:, head_sha:, check_run_id:)
+  def initiate_check_run(full_repo_name:, pull_number:, head_sha:, check_run_id:, app_options: nil)
     # As soon as the run is initiated, mark it as in progress on GitHub
     @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
     # Get the options for the app from the `.github/config.yml` file in the repository
-    app_options = get_app_options(full_repo_name, head_sha)
+    app_options ||= get_app_options(full_repo_name, head_sha)
     # logger.debug app_options
 
     comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
@@ -240,6 +252,7 @@ helpers do
   def get_app_options(full_repo_name, head_sha)
     default_options = {
       'post_comment' => 'items_found',
+      'check_drafts' => false,
       'multiline_comments' => false,
       'action_items' => %w[todo fixme bug],
       'case_sensitive' => false,
@@ -253,6 +266,7 @@ helpers do
 
     accepted_option_values = {
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
+      'check_drafts' => ->(value) { [true, false].include?(value) },
       'multiline_comments' => ->(value) { [true, false].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
