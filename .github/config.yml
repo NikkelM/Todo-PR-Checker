@@ -19,6 +19,12 @@ todo-pr-checker:
   additional_lines: 1
   # Whether or not searching for action items should be case sensitive
   case_sensitive: false
+  # Whether or not comments appearing after code on the same line should be considered
+  # Enabling this may increase false positives when comment characters occur inside strings
+  check_inline_comments: false
+  # Whether or not action items must be surrounded by whitespace
+  # Enabling this excludes items adjacent to punctuation, such as TODO: or (TODO)
+  standalone_items: false
   # If multiline comments should also be searched for action items
   # This may result in some false positives or negatives if the opening or closing lines of a comment are not in the diff 
   multiline_comments: false

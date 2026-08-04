@@ -18,16 +18,19 @@ This list will update whenever new changes are pushed, so you always know exactl
 The app supports a wide array of programming languages and action items.
 Should you find that your language of choice or action item is not supported out-of-the-box, you can easily configure the app to support it.
 
-To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app will only look for action items if the comment starts in its own line.
-The following examples would *not* cause the app to flag the action items:
+To minimize falsely identified comments (e.g. the characters that start a comment are contained in a string), the app only looks for action items when the comment starts on its own line by default.
+The following examples are not flagged unless `check_inline_comments` is enabled:
 
 ```javascript
-let variable = true; // TODO: Find a better name for the variable
+let variable = true; // TODO: This action items won't be detected
 
 let otherVar = false; /*
-If the comment does not start on its own line, the TODO action item will not be detected!
+Because if the comment does not start on its own line, the app skips it by default
+TODO: Use the check_inline_comments option to detect both of these cases
 */
 ```
+
+Action items may be directly adjacent to punctuation by default, such as `TODO:` or `(TODO)`. Enable `standalone_items` to require whitespace around an action item.
 
 Additionally, support for multiline comments is *disabled* by default, as it may cause the app to incorrectly identify action items if the opening or closing characters of the block comment are not included in the Pull Request diff.
 You may enable support for multiline comments in the options, see the section below.
@@ -58,6 +61,8 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 | `add_languages` | `[string[file_type, line_start, block_start, block_end]]`</br>Example: `[['js', '//', '/*', '*/'], ['php', ['//', '#'], '/*', '*/'], ['css', null, '/*', '*/'], ['.py', '#']]`, maximum 10 entries | A list of a list of programming languages to add support for. This list will be added to the already supported languages. If you define a language that is already supported, the default values will be overwritten. `file_type` must be the extension of the file (e.g. `js`) and may start with a `.`. If the file type you are adding supports multiple line comment types, you may define an `array` of `strings` instead of just a `string`. You may omit the block comment definitions if the file type does not support block comments. If you want to omit the definition of a line comment, you may set `line_start` to `null` or omit it. If defining `block_start`, `block_end` must also be defined. You may specify up to 10 new file types. *The file types shown in the example are already natively supported by the app.* | `null` |
 | `additional_lines` | `integer` between `0` and `10` | The number of additional lines to include below found action items in embedded code snippets. If set to `0`, the code snippet shows only the line with the action item. This setting does not influence the behaviour of showing multiple action items in one snippet if they are located close to each other. *Note that if there are not enough lines left in the file to display, the embedded code snippet will not be able to render and will display as a link only.* | `1` |
 | `case_sensitive` | `true`, `false` | Controls whether the app should look for action items in a case-sensitive manner. | `false` |
+| `check_inline_comments` | `true`, `false` | Controls whether comments appearing after code on the same changed line are checked. Enabling this may cause false positives when comment characters occur inside strings. | `false` |
+| `standalone_items` | `true`, `false` | Controls whether action items must be surrounded by whitespace. If enabled, punctuation-adjacent values such as `TODO:` and `(TODO)` are not matched. | `false` |
 | `multiline_comments` | `true`, `false` | Whether or not looking for action items in multiline block comments is enabled or not. When enabled, the app *may* incorrectly mark action items in your Pull Request if at least one of the opening or closing line of the block comment (e.g. `*/` and `/*` in JavaScript) are not included in the Pull Request diff, which causes them to not be found by the app. For multiline comments to always work, you must ensure that both the opening and closing characters are included in the diff. Action items located on the first line of a block comment will always be detected, even if this option is disabled. | `false` |
 | `always_split_snippets` | `true`, `false` | Whether or not action items should always be rendered in separate code snippets, even when they are located close to each other in code. | `false` |
 

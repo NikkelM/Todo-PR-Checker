@@ -243,6 +243,8 @@ helpers do
       'multiline_comments' => true,
       'action_items' => %w[todo fixme bug],
       'case_sensitive' => false,
+      'check_inline_comments' => false,
+      'standalone_items' => false,
       'add_languages' => [],
       'ignore_files' => [],
       'additional_lines' => 1,
@@ -254,6 +256,8 @@ helpers do
       'multiline_comments' => ->(value) { [true, false].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
+      'check_inline_comments' => ->(value) { [true, false].include?(value) },
+      'standalone_items' => ->(value) { [true, false].include?(value) },
       # A language may have multiple line characters, defined as an array of strings in second place, or just a string
       'add_languages' => lambda do |value|
         value.is_a?(Array) &&
@@ -347,6 +351,8 @@ helpers do
     multiline_comments = options['multiline_comments']
     action_items = options['action_items']
     case_sensitive = options['case_sensitive']
+    check_inline_comments = options['check_inline_comments']
+    standalone_items = options['standalone_items']
 
     todo_changes = {}
     unsupported_files = []
@@ -356,7 +362,8 @@ helpers do
 
     # Create a regex for each action item
     regexes = action_items.map do |item|
-      regex = /\b#{item}\b/
+      escaped_item = Regexp.escape(item)
+      regex = standalone_items ? /(?<!\S)#{escaped_item}(?!\S)/ : /\b#{escaped_item}\b/
       case_sensitive ? regex : Regexp.new(regex.source, Regexp::IGNORECASE)
     end
 
@@ -376,16 +383,32 @@ helpers do
       # Check each line in the file for action items
       file_changes.each do |line|
         text = line[:text].strip
-
-        # Set the flag if the line starts a block comment, or is the start of a block comment
-        in_multiline_comment ||= multiline_comments && comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
-        on_block_comment_starting_line = comment_char[1][:block_start] && text.start_with?(comment_char[1][:block_start])
+        block_start = comment_char[1][:block_start]
+        line_comment_starts = comment_char[1][:line].compact
+        line_comment_start_index = if check_inline_comments
+                                     line_comment_starts.filter_map { |char| text.index(char) }.min
+                                   else
+                                     0 if line_comment_starts.any? { |char| text.start_with?(char) }
+                                   end
+        block_start_index = if check_inline_comments
+                              text.index(block_start) if block_start
+                            else
+                              0 if block_start && text.start_with?(block_start)
+                            end
+        comment_start_index = [line_comment_start_index, block_start_index].compact.min
+        comment_text = in_multiline_comment ? text : text[comment_start_index..] if in_multiline_comment || comment_start_index
 
         # If the line is a comment and contains any action item, add it to the output collection
-        file_todos << line if (comment_char[1][:line].any? { |char| text.start_with?(char) } || on_block_comment_starting_line || in_multiline_comment) && regexes.any? { |regex| text.match(regex) }
+        file_todos << line if comment_text && regexes.any? { |regex| comment_text.match(regex) }
 
-        # Reset the flag if the line ends a block comment
-        in_multiline_comment = false if !multiline_comments || (comment_char[1][:block_end] && text.end_with?(comment_char[1][:block_end]))
+        if !multiline_comments
+          in_multiline_comment = false
+        elsif in_multiline_comment
+          in_multiline_comment = false if comment_char[1][:block_end] && text.include?(comment_char[1][:block_end])
+        elsif block_start_index && (!line_comment_start_index || block_start_index <= line_comment_start_index)
+          block_end_index = text.index(comment_char[1][:block_end], block_start_index + block_start.length)
+          in_multiline_comment = block_end_index.nil?
+        end
       end
 
       # We don't want to add files to the output collection if they don't contain any action items, as they shouldn't be posted in the comment
