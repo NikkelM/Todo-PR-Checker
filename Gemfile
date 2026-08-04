@@ -8,3 +8,8 @@ gem 'jwt', '~> 2.1'
 gem 'octokit', '~> 5.0'
 gem 'puma'
 gem 'sinatra', '~> 2.0'
+
+group :test do
+  gem 'minitest'
+  gem 'rack-test'
+end
