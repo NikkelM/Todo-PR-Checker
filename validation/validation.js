@@ -1,4 +1,4 @@
-// TODO: Alerts in this file: ? if multiline comments, 1 if standalone_items, 6 else
+// TODO: Alerts with default options: 8
 let a = "todo";
 //TODO: Alert
 let b = "todo";
