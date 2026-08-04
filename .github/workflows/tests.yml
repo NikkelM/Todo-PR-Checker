@@ -25,4 +25,4 @@ jobs:
           bundler-cache: true
 
       - name: Run tests
-        run: bundle exec ruby -Itest test/app_test.rb
+        run: bundle exec ruby -Itest -e "Dir['test/**/*_test.rb'].sort.each { |file| require File.expand_path(file) }"
