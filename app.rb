@@ -301,7 +301,7 @@ helpers do
             # Extract the new file's starting line number from the hunk header
             # Example: @@ -1,6 +1,7 @@
             m = line.match(/\+([0-9]+)/)
-            line_number = m ? m[1].to_i - 1 : line_number
+            line_number = m ? m[1].to_i : line_number
           elsif line.start_with?('+') && !line.start_with?('+++')
             changes[filename] << { line: line_number, text: line[1..] }
             line_number += 1

@@ -293,6 +293,32 @@ class WebhookValidationTest < WebhookTest
   end
 end
 
+class PullRequestChangeParsingTest < Minitest::Test
+  def test_first_added_line_uses_one_based_line_number_in_comment_link
+    scanner = Sinatra::Application.new!
+    config_file = Struct.new(:content).new(Base64.strict_encode64("todo-pr-checker: {}\n"))
+    changed_file = Struct.new(:filename, :patch).new(
+      'validation.js',
+      "@@ -0,0 +1,2 @@\n+// TODO: First line\n+const value = true;\n"
+    )
+    installation_client = Object.new
+    installation_client.define_singleton_method(:contents) { |*| config_file }
+    installation_client.define_singleton_method(:pull_request_files) do |*, page:, **|
+      page == 1 ? [changed_file] : []
+    end
+    scanner.instance_variable_set(:@installation_client, installation_client)
+
+    options = scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+    changes, = scanner.send(:get_pull_request_changes, 'octocat/example', 7, [])
+    todo_changes = scanner.send(:check_for_todos, changes, options)
+    comment = scanner.send(:create_pr_comment_from_changes, todo_changes, 'octocat/example', 'head-sha', options)
+
+    assert_equal [1, 2], changes.fetch('validation.js').map { |change| change[:line] }
+    assert_includes comment[:body], 'validation.js#L1-L2'
+    refute_includes comment[:body], '#L0'
+  end
+end
+
 class DefaultValidationFixtureTest < Minitest::Test
   EXPECTED_ALERT_LINES = {
     'validation.css' => [1, 2, 7],
