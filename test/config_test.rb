@@ -2,6 +2,39 @@
 
 require_relative 'test_helper'
 
+class DraftPullRequestConfigurationTest < Minitest::Test
+  def setup
+    @scanner = Sinatra::Application.new!
+    @config_file = Struct.new(:content).new(Base64.strict_encode64("todo-pr-checker: {}\n"))
+    config_file = @config_file
+    installation_client = Object.new
+    installation_client.define_singleton_method(:contents) { |*| config_file }
+    @scanner.instance_variable_set(:@installation_client, installation_client)
+  end
+
+  def test_check_drafts_defaults_to_false
+    options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+
+    assert_equal false, options['check_drafts']
+  end
+
+  def test_check_drafts_accepts_true
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  check_drafts: true\n")
+
+    options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+
+    assert_equal true, options['check_drafts']
+  end
+
+  def test_invalid_check_drafts_uses_default
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  check_drafts: drafts\n")
+
+    options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+
+    assert_equal false, options['check_drafts']
+  end
+end
+
 class ActionItemMatchingOptionsTest < Minitest::Test
   def setup
     @scanner = Sinatra::Application.new!
@@ -220,12 +253,17 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
   def setup
     @calls = []
     @files = []
+    @content_requests = []
     calls = @calls
     files = @files
+    content_requests = @content_requests
     @config_file = Struct.new(:content).new(Base64.strict_encode64("todo-pr-checker: {}\n"))
     config_file = @config_file
     installation_client = Object.new
-    installation_client.define_singleton_method(:contents) { |*| config_file }
+    installation_client.define_singleton_method(:contents) do |*|
+      content_requests << true
+      config_file
+    end
     installation_client.define_singleton_method(:pull_request_files) do |*, page:, **|
       page == 1 ? files : []
     end
@@ -287,15 +325,25 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
     assert_equal '✘ 1 unresolved action item found!', final_check[:kwargs].dig(:output, :title)
   end
 
+  def test_preloaded_options_avoid_second_configuration_lookup
+    @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n")
+    options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+
+    run_check(app_options: options)
+
+    assert_equal 1, @content_requests.length
+  end
+
   private
 
-  def run_check
-    ORIGINAL_INITIATE_CHECK_RUN.bind_call(
-      @scanner,
+  def run_check(app_options: nil)
+    arguments = {
       full_repo_name: 'octocat/example',
       pull_number: 7,
       head_sha: 'head-sha',
       check_run_id: 123
-    )
+    }
+    arguments[:app_options] = app_options if app_options
+    ORIGINAL_INITIATE_CHECK_RUN.bind_call(@scanner, **arguments)
   end
 end

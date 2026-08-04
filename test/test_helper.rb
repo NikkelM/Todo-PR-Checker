@@ -13,6 +13,7 @@ require 'rack/test'
 require_relative '../app'
 
 Sinatra::Application.set :test_calls, []
+Sinatra::Application.set :test_config_content, "todo-pr-checker: {}\n"
 ORIGINAL_INITIATE_CHECK_RUN = Sinatra::Application.instance_method(:initiate_check_run)
 
 Sinatra::Application.helpers do
@@ -22,6 +23,10 @@ Sinatra::Application.helpers do
 
   def authenticate_installation(payload)
     settings.test_calls << [:authenticate_installation, payload.dig('installation', 'id')]
+    config_file = Struct.new(:content).new(Base64.strict_encode64(settings.test_config_content))
+    installation_client = Object.new
+    installation_client.define_singleton_method(:contents) { |*| config_file }
+    @installation_client = installation_client
   end
 
   def create_check_run(full_repo_name, head_sha)

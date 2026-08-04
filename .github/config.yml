@@ -1,6 +1,8 @@
 todo-pr-checker:
   # When should comments be posted? 
   post_comment: 'items_found'
+  # Whether or not draft Pull Requests should be checked
+  check_drafts: false
   # Files that get matched by any of these glob patterns will be ignored
   ignore_files: null
   # What action items should be looked for (setting this will the overwrite default values)

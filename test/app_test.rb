@@ -11,6 +11,7 @@ class WebhookTest < Minitest::Test
 
   def setup
     app.settings.test_calls.clear
+    app.settings.test_config_content = "todo-pr-checker: {}\n"
   end
 
   private
@@ -26,11 +27,12 @@ class WebhookTest < Minitest::Test
     }
   end
 
-  def pull_request_payload(action)
+  def pull_request_payload(action, draft: false)
     base_payload.merge(
       'action' => action,
       'pull_request' => {
         'number' => 7,
+        'draft' => draft,
         'head' => { 'sha' => 'head-sha' }
       }
     )
@@ -100,6 +102,38 @@ class WebhookRoutingTest < WebhookTest
 
     assert_equal 200, last_response.status
     assert_includes app.settings.test_calls, [:create_check_run, 'octocat/example', 'head-sha']
+  end
+
+  def test_processes_pull_request_when_ready_for_review
+    post_webhook('pull_request', pull_request_payload('ready_for_review'))
+
+    assert_equal 200, last_response.status
+    assert_includes app.settings.test_calls, [:create_check_run, 'octocat/example', 'head-sha']
+  end
+
+  def test_skips_draft_pull_requests_by_default
+    %w[opened synchronize reopened].each do |action|
+      app.settings.test_calls.clear
+      post_webhook('pull_request', pull_request_payload(action, draft: true))
+
+      assert_equal 204, last_response.status
+      assert_equal [
+        [:authenticate_app],
+        [:authenticate_installation, 456]
+      ], app.settings.test_calls
+    end
+  end
+
+  def test_processes_draft_pull_request_when_enabled
+    app.settings.test_config_content = "todo-pr-checker:\n  check_drafts: true\n"
+
+    post_webhook('pull_request', pull_request_payload('opened', draft: true))
+
+    initiate_call = app.settings.test_calls.find { |call| call.first == :initiate_check_run }
+
+    assert_equal 200, last_response.status
+    assert_includes app.settings.test_calls, [:create_check_run, 'octocat/example', 'head-sha']
+    assert_equal true, initiate_call[1][:app_options]['check_drafts']
   end
 
   def test_ignores_irrelevant_pull_request_action_before_authentication

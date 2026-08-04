@@ -4,7 +4,9 @@
 
 <!--Releasenotes start-->
 - Added reporting for changed text files that were not checked because their file type is unsupported.
-- Added options to check inline comments and require action items to be surrounded by whitespace.
+- Added a `check_inline_comments` option, disabled by default, to check comments appearing after code on the same line.
+- Added a `standalone_items` option, disabled by default, to require action items to be surrounded by whitespace.
+- Added a `check_drafts` option, disabled by default, to skip scanning draft Pull Requests until they are ready for review.
 - Changed the default value of `multiline_comments` to `false`, matching the documented safer behavior for partial Pull Request diffs.
 - Fixed configured action items containing regular expression characters not being matched correctly.
 - Fixed action-item links pointing one line above the actual comment, which produced invalid line-zero links for action items on the first line of a file.
