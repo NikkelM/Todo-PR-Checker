@@ -25,6 +25,7 @@ GITHUB_WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
 APP_IDENTIFIER = ENV.fetch('GITHUB_APP_IDENTIFIER', nil)
 APP_FRIENDLY_NAME = ENV.fetch('APP_FRIENDLY_NAME', 'Todo PR Checker')
 RELEVANT_PULL_REQUEST_ACTIONS = %w[opened synchronize reopened].freeze
+MAX_REPORTED_UNCHECKED_FILES = 50
 
 configure :development do
   set :logging, Logger::DEBUG
@@ -139,44 +140,68 @@ helpers do
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
     changes, ignored_files = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
-    ignored_files_string = if ignored_files.empty?
-                             ''
-                           else
-                             "\n\nSome changed files were ignored due to your settings: #{ignored_files.map { |file| "[`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join(', ')}\n"
-                           end
-    # If there are no changes, mark the run as skipped and return early
-    if changes.empty?
+
+    # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
+    todo_changes, unsupported_files = check_for_todos(changes, app_options)
+
+    unchecked_files_string = ''
+    unless ignored_files.empty? && unsupported_files.empty?
+      remaining_file_limit = MAX_REPORTED_UNCHECKED_FILES
+      reported_ignored_files = ignored_files.first(remaining_file_limit)
+      remaining_file_limit -= reported_ignored_files.length
+      reported_unsupported_files = unsupported_files.first(remaining_file_limit)
+      omitted_file_count = ignored_files.length + unsupported_files.length - reported_ignored_files.length - reported_unsupported_files.length
+
+      unchecked_files_string = "\n\n<details>\n<summary>Files not checked (#{ignored_files.length + unsupported_files.length})</summary>\n<br>\n\n"
+      unless reported_ignored_files.empty?
+        unchecked_files_string += "**Ignored by configuration**\n\n"
+        unchecked_files_string += reported_ignored_files.map { |file| "- [`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join("\n")
+        unchecked_files_string += "\n\n"
+      end
+      unless reported_unsupported_files.empty?
+        unchecked_files_string += "**Unsupported file types**\n\n"
+        unsupported_file_groups = unsupported_files.group_by { |file| File.extname(file).downcase }
+        reported_unsupported_files.group_by { |file| File.extname(file).downcase }.sort.each do |extension, files|
+          group_name = extension.empty? ? 'No extension' : "`#{extension}`"
+          unchecked_files_string += "#{group_name} (#{unsupported_file_groups.fetch(extension).length})\n\n"
+          unchecked_files_string += files.map { |file| "- [`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join("\n")
+          unchecked_files_string += "\n\n"
+        end
+      end
+      unchecked_files_string += "_...and #{omitted_file_count} more._\n\n" if omitted_file_count.positive?
+      unchecked_files_string += "</details>\n"
+    end
+
+    # If there are no supported changes, mark the run as skipped and return early
+    if (changes.keys - unsupported_files).empty?
       @installation_client.update_check_run(
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'skipped',
-        output: { title: '✔ No changed files found!', summary: "No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.\n#{ignored_files_string}#{comment_footer}" },
+        output: { title: '✔ No changed files found!', summary: "No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.#{unchecked_files_string}#{comment_footer}" },
         accept: 'application/vnd.github+json'
       )
       return
     end
-
-    # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
-    todo_changes = check_for_todos(changes, app_options)
 
     # If the app has previously created a comment on the Pull Request, fetch it
     app_comment = fetch_app_comment(full_repo_name, pull_number)
 
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
+      check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, head_sha, app_options).values_at(:title, :summary, :body)
+
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
-        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, head_sha, app_options).values_at(:title, :summary, :body)
-
         # Post or update the comment with the found action items
         if app_comment
-          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_summary}#{comment_body}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_summary}#{comment_body}#{unchecked_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_summary}#{comment_body}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_summary}#{comment_body}#{unchecked_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
         end
       end
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: "#{comment_body}#{ignored_files_string}#{comment_footer}" }, accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: "#{comment_body}#{unchecked_files_string}#{comment_footer}" }, accept: 'application/vnd.github+json')
     else
       comment_header = '✔ No action items found!'
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
@@ -195,7 +220,7 @@ helpers do
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'success',
-        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.\n#{ignored_files_string}#{comment_footer}" },
+        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.#{unchecked_files_string}#{comment_footer}" },
         accept: 'application/vnd.github+json'
       )
     end
@@ -292,9 +317,9 @@ helpers do
           next
         end
 
-        changes[filename] = []
         # Parse the patch to get added lines and their line numbers
         next unless file.patch
+        changes[filename] = []
         line_number = 0
         file.patch.each_line do |line|
           if line.start_with?('@@')
@@ -324,6 +349,7 @@ helpers do
     case_sensitive = options['case_sensitive']
 
     todo_changes = {}
+    unsupported_files = []
     in_multiline_comment = false
 
     comment_chars = get_comment_chars(options['add_languages'])
@@ -337,10 +363,13 @@ helpers do
     # Changes are grouped by file name
     changes.each do |file, file_changes|
       file_type = File.extname(file).delete('.')
-      comment_char = comment_chars.find { |k, _| k.include?(file_type) }
+      comment_char = comment_chars.find { |key, _| key == file_type }
 
       # If there is no mapping for the file type, skip it
-      next unless comment_char
+      unless comment_char
+        unsupported_files << file
+        next
+      end
 
       file_todos = []
       in_multiline_comment = false
@@ -363,7 +392,7 @@ helpers do
       todo_changes[file] = file_todos unless file_todos.empty?
     end
 
-    todo_changes
+    [todo_changes, unsupported_files]
   end
 
   # (6) Retrieves the file types and comment characters for the app's supported languages, and user defined values
