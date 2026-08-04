@@ -240,7 +240,7 @@ helpers do
   def get_app_options(full_repo_name, head_sha)
     default_options = {
       'post_comment' => 'items_found',
-      'multiline_comments' => true,
+      'multiline_comments' => false,
       'action_items' => %w[todo fixme bug],
       'case_sensitive' => false,
       'check_inline_comments' => false,
@@ -363,7 +363,7 @@ helpers do
     # Create a regex for each action item
     regexes = action_items.map do |item|
       escaped_item = Regexp.escape(item)
-      regex = standalone_items ? /(?<!\S)#{escaped_item}(?!\S)/ : /\b#{escaped_item}\b/
+      regex = standalone_items ? /(?<!\S)#{escaped_item}(?!\S)/ : /(?<!\w)#{escaped_item}(?!\w)/
       case_sensitive ? regex : Regexp.new(regex.source, Regexp::IGNORECASE)
     end
 
