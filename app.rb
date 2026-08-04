@@ -473,7 +473,6 @@ helpers do
   ##############################################################################################################
   # Boilerplate code for parsing the webhook payload
   def get_payload_request(request)
-    request.body.rewind
     @payload_raw = request.body.read
     begin
       @payload = JSON.parse @payload_raw
