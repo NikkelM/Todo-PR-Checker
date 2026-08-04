@@ -1,11 +1,18 @@
 # Changelog
 
-## v1.4.4
+## v1.5.0
 
 <!--Releasenotes start-->
+- Changed the app to run normal checks directly from Pull Request webhook events instead of Check suite requested events.
+- Preserved individual and suite-level check re-runs from the GitHub UI while ignoring unrelated Check run and Check suite events before authenticating with the GitHub API.
+- Changed valid but irrelevant webhook deliveries to return a successful `204` response instead of a `400` error.
+- Corrected the documented environment variable name for the GitHub App identifier.
+<!--Releasenotes end-->
+
+## v1.4.4
+
 - Fixed an issue with Github having deprecated a request authentication header the App used for webhook validation.
 - Bumped a number of dependencies to their latest versions.
-<!--Releasenotes end-->
 
 ## v1.4.3
 

@@ -24,83 +24,115 @@ GITHUB_PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV.fetch('GITHUB_PRIVATE_KEY', nil)
 GITHUB_WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
 APP_IDENTIFIER = ENV.fetch('GITHUB_APP_IDENTIFIER', nil)
 APP_FRIENDLY_NAME = ENV.fetch('APP_FRIENDLY_NAME', 'Todo PR Checker')
+RELEVANT_PULL_REQUEST_ACTIONS = %w[opened synchronize reopened].freeze
 
 configure :development do
   set :logging, Logger::DEBUG
 end
 
-# Before running the event handler, verify the webhook signature and authenticate the app
+# Before running the event handler, parse and verify the webhook
 before '/' do
   get_payload_request(request)
   verify_webhook_signature
-
-  halt 400 if @payload['repository'].nil? || (@payload['repository']['name'] =~ /[0-9A-Za-z\-\_]+/).nil?
-
-  authenticate_app
-  authenticate_installation(@payload)
 end
 
 # Handles webhook events from GitHub, which are sent as HTTP POST requests
-# We only handle pull_request, check_suite, and check_run events
+# We handle relevant pull_request events and reruns of this app's check runs
 post '/' do
   event_type = request.env['HTTP_X_GITHUB_EVENT']
-  event_handled = false
+  event_context = get_webhook_event_context(event_type, @payload)
+  originating_app_id = @payload.dig(event_type, 'app', 'id') if event_type
 
-  # If we got an event that wasn't meant for our app, return early
-  # Pull Request events are not associated with an app, so we excempt them from this check
-  return 400 if event_type != 'pull_request' && @payload.dig(event_type, 'app', 'id')&.to_s != APP_IDENTIFIER
+  logger.debug "Webhook event=#{event_type} action=#{@payload['action']} repository_id=#{@payload.dig('repository', 'id')} installation_id=#{@payload.dig('installation', 'id')} app_id=#{originating_app_id} decision=#{event_context ? event_context[:type] : 'ignore'}"
+  return 204 unless event_context
 
-  # If a Pull Request was opened, we want to *create* a new check run (it is not yet executed)
-  if event_type == 'pull_request' && @payload['action'] == 'opened'
-    event_handled = true
-    create_check_run
-  end
+  authenticate_app
+  authenticate_installation(@payload)
 
-  # If a new check suite is requested, we want to *create* a new check run (it is not yet executed)
-  # We only want to create a check if a Pull Request is associated with the event
-  if event_type == 'check_suite' && @payload['check_suite']['pull_requests'].first && (@payload['action'] == 'requested' || @payload['action'] == 'rerequested')
-    event_handled = true
-    create_check_run
-  end
+  check_run = create_check_run(event_context[:full_repo_name], event_context[:head_sha])
+  initiate_check_run(
+    full_repo_name: event_context[:full_repo_name],
+    pull_number: event_context[:pull_number],
+    head_sha: event_context[:head_sha],
+    check_run_id: check_run.id
+  )
 
-  # If a new check run is requested, we want to run the app logic and report the results
-  # We only want to create a check if a Pull Request is associated with the event
-  if event_type == 'check_run' && @payload['check_run']['pull_requests'].first && (@payload['action'] == 'created' || @payload['action'] == 'rerequested')
-    event_handled = true
-    initiate_check_run
-  end
-
-  event_handled ? 200 : 204
+  200
 end
 
 helpers do
-  # (1) Creates an empty check run on GitHub associated with the most recent commit, but does not run the app's logic
-  def create_check_run
-    event_type = request.env['HTTP_X_GITHUB_EVENT']
+  def get_webhook_event_context(event_type, payload)
+    case event_type
+    when 'pull_request'
+      return unless RELEVANT_PULL_REQUEST_ACTIONS.include?(payload['action'])
 
-    # Depending on the event type, the commit SHA is in a different location
-    sha = if event_type == 'pull_request'
-            @payload['pull_request']['head']['sha']
-          else
-            @payload[event_type]['head_sha']
-          end
+      validate_repository(payload)
+      pull_request = payload['pull_request']
+      halt 400 unless pull_request.is_a?(Hash) && pull_request['number'] && pull_request.dig('head', 'sha')
 
+      {
+        type: :pull_request,
+        full_repo_name: payload['repository']['full_name'],
+        pull_number: pull_request['number'],
+        head_sha: pull_request.dig('head', 'sha')
+      }
+    when 'check_run'
+      check_run = payload['check_run']
+      return unless check_run.is_a?(Hash)
+      return unless check_run.dig('app', 'id')&.to_s == APP_IDENTIFIER
+      return unless payload['action'] == 'rerequested'
+
+      pull_request = check_run['pull_requests']&.first
+      return unless pull_request
+
+      validate_repository(payload)
+      halt 400 unless pull_request['number'] && check_run['head_sha']
+
+      {
+        type: :check_run_rerequested,
+        full_repo_name: payload['repository']['full_name'],
+        pull_number: pull_request['number'],
+        head_sha: check_run['head_sha']
+      }
+    when 'check_suite'
+      check_suite = payload['check_suite']
+      return unless check_suite.is_a?(Hash)
+      return unless check_suite.dig('app', 'id')&.to_s == APP_IDENTIFIER
+      return unless payload['action'] == 'rerequested'
+
+      pull_request = check_suite['pull_requests']&.first
+      return unless pull_request
+
+      validate_repository(payload)
+      halt 400 unless pull_request['number'] && check_suite['head_sha']
+
+      {
+        type: :check_suite_rerequested,
+        full_repo_name: payload['repository']['full_name'],
+        pull_number: pull_request['number'],
+        head_sha: check_suite['head_sha']
+      }
+    end
+  end
+
+  def validate_repository(payload)
+    repository = payload['repository']
+    halt 400 unless repository.is_a?(Hash) && repository['full_name'].is_a?(String) && !repository['full_name'].empty?
+  end
+
+  # (1) Creates an empty check run on GitHub associated with the most recent commit
+  def create_check_run(full_repo_name, head_sha)
     # Create a new check run to report on the progress of the app, and associate it with the most recent commit
-    @installation_client.create_check_run(@payload['repository']['full_name'], APP_FRIENDLY_NAME, sha, status: 'queued', accept: 'application/vnd.github+json')
+    @installation_client.create_check_run(full_repo_name, APP_FRIENDLY_NAME, head_sha, status: 'queued', accept: 'application/vnd.github+json')
   end
 
   # (2) Contains the main logic of the app, checking and reporting on action items in code comments during a CI check
-  def initiate_check_run
-    full_repo_name = @payload['repository']['full_name']
-    pull_requests = @payload['check_run']['pull_requests']
-    pull_number = pull_requests.first['number'] if pull_requests.any?
-    check_run_id = @payload['check_run']['id']
-
+  def initiate_check_run(full_repo_name:, pull_number:, head_sha:, check_run_id:)
     # As soon as the run is initiated, mark it as in progress on GitHub
     @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
     # Get the options for the app from the `.github/config.yml` file in the repository
-    app_options = get_app_options(full_repo_name, @payload['check_run']['head_sha'])
+    app_options = get_app_options(full_repo_name, head_sha)
     # logger.debug app_options
 
     comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
@@ -110,7 +142,7 @@ helpers do
     ignored_files_string = if ignored_files.empty?
                              ''
                            else
-                             "\n\nSome changed files were ignored due to your settings: #{ignored_files.map { |file| "[`#{file}`](https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file})" }.join(', ')}\n"
+                             "\n\nSome changed files were ignored due to your settings: #{ignored_files.map { |file| "[`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join(', ')}\n"
                            end
     # If there are no changes, mark the run as skipped and return early
     if changes.empty?
@@ -134,7 +166,7 @@ helpers do
     if todo_changes.any?
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
-        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, app_options).values_at(:title, :summary, :body)
+        check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, head_sha, app_options).values_at(:title, :summary, :body)
 
         # Post or update the comment with the found action items
         if app_comment
@@ -381,7 +413,7 @@ helpers do
   end
 
   # (7) Creates a comment text from the found action items, with embedded links to the relevant lines
-  def create_pr_comment_from_changes(todo_changes, full_repo_name, app_options)
+  def create_pr_comment_from_changes(todo_changes, full_repo_name, head_sha, app_options)
     additional_lines = app_options['additional_lines']
     always_split_snippets = app_options['always_split_snippets']
 
@@ -399,7 +431,7 @@ helpers do
 
     comment_body = ''
     todo_changes.each do |file, changes|
-      file_link = "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}"
+      file_link = "https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file}"
       num_items = if changes.count == 1
                     '1 action item'
                   else
@@ -419,9 +451,9 @@ helpers do
         first_line = group.first[:line]
         last_line = group.last[:line]
         comment_body += if first_line == last_line && additional_lines.zero?
-                          "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line} "
+                          "https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file}#L#{first_line} "
                         else
-                          "https://github.com/#{full_repo_name}/blob/#{@payload['check_run']['head_sha']}/#{file}#L#{first_line}-L#{last_line + additional_lines} "
+                          "https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file}#L#{first_line}-L#{last_line + additional_lines} "
                         end
       end
     end

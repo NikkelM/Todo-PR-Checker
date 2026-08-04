@@ -87,6 +87,14 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 
 Before you are able to locally develop and run the app, you need to create and set up a GitHub App as described in the [GitHub documentation](https://docs.github.com/en/apps/creating-github-apps), so you are able to receive webhooks from GitHub in your local instance of the app.
 
+Configure the GitHub App with the following repository permissions:
+
+- Checks: Read and write
+- Contents: Read-only
+- Pull requests: Read and write
+
+Subscribe the GitHub App to the **Pull request**, **Check run**, and **Check suite** events. The app uses Pull Request events to run checks when a Pull Request is opened, synchronized, or reopened. The Check run and Check suite subscriptions are retained so users can re-run individual checks or all checks from the GitHub UI.
+
 Install the required gems with:
 
 ```bash
@@ -96,7 +104,7 @@ bundle install
 Then create a `.env` file with the following content:
 
 ```text
-GITHUB_APP_ID=${App ID from the GitHub App settings}
+GITHUB_APP_IDENTIFIER=${App ID from the GitHub App settings}
 GITHUB_PRIVATE_KEY=${Private key generated in the GitHub App settings}
 GITHUB_WEBHOOK_SECRET=${Webhook secret set in the GitHub App settings}
 APP_FRIENDLY_NAME=${Name of the CI check}
@@ -121,20 +129,17 @@ ruby ./app.rb
 If you have correctly created and installed the app in a repository, and set up the webhooks correctly, you should now see the app receiving events like these when you create or update a Pull Request:
 
 ```text
-D, [2024-02-05T14:04:28.359807 #26008] DEBUG -- : ---- received event check_suite
-D, [2024-02-05T14:04:28.360041 #26008] DEBUG -- : ----    action requested
-D, [2024-02-05T14:04:28.786714 #26008] DEBUG -- : ---- received event pull_request
-D, [2024-02-05T14:04:28.786849 #26008] DEBUG -- : ----    action synchronize
-xxx.xx.xxx.xxx:35146 - - [05/Feb/2024:14:04:29 +0000] "POST / HTTP/1.1" 200 - 0.2616
-xxx.xx.xxx.xxx:47458 - - [05/Feb/2024:14:04:29 +0000] "POST / HTTP/1.1" 200 - 0.8099
-D, [2024-02-05T14:04:29.872895 #26008] DEBUG -- : ---- received event check_run
-D, [2024-02-05T14:04:29.873041 #26008] DEBUG -- : ----    action created
-xxx.xx.xxx.xxx:36950 - - [05/Feb/2024:14:04:32 +0000] "POST / HTTP/1.1" 200 - 2.7705
-D, [2024-02-05T14:04:33.227254 #26008] DEBUG -- : ---- received event check_suite
-D, [2024-02-05T14:04:33.227460 #26008] DEBUG -- : ----    action completed
-D, [2024-02-05T14:04:33.351184 #26008] DEBUG -- : ---- received event check_run
-D, [2024-02-05T14:04:33.351388 #26008] DEBUG -- : ----    action completed
+D, [2026-08-04T13:40:28.359807 #26008] DEBUG -- : ---- received event pull_request
+D, [2026-08-04T13:40:28.360041 #26008] DEBUG -- : ----    action synchronize
+D, [2026-08-04T13:40:28.360102 #26008] DEBUG -- : Webhook event=pull_request action=synchronize repository_id=123 installation_id=456 app_id= decision=pull_request
+xxx.xx.xxx.xxx:35146 - - [04/Aug/2026:13:40:30 +0000] "POST / HTTP/1.1" 200 - 1.8412
+D, [2026-08-04T13:40:30.201807 #26008] DEBUG -- : ---- received event check_run
+D, [2026-08-04T13:40:30.201941 #26008] DEBUG -- : ----    action created
+D, [2026-08-04T13:40:30.202012 #26008] DEBUG -- : Webhook event=check_run action=created repository_id=123 installation_id=456 app_id=816025 decision=ignore
+xxx.xx.xxx.xxx:35147 - - [04/Aug/2026:13:40:30 +0000] "POST / HTTP/1.1" 204 - 0.0012
 ```
+
+GitHub sends Check run and Check suite webhooks for checks created by other Apps installed on the same repository. Todo PR Checker verifies these deliveries and returns `204` before authenticating with the GitHub API.
 
 ### Troubleshooting
 
