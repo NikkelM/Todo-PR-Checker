@@ -7,7 +7,8 @@ gem 'git'
 gem 'jwt', '~> 3.2'
 gem 'octokit', '~> 5.0'
 gem 'puma'
-gem 'sinatra', '~> 2.0'
+gem 'rackup'
+gem 'sinatra', '~> 4.2'
 
 group :test do
   gem 'minitest'
