@@ -292,3 +292,39 @@ class WebhookValidationTest < WebhookTest
     assert_empty app.settings.test_calls
   end
 end
+
+class DefaultValidationFixtureTest < Minitest::Test
+  EXPECTED_ALERT_LINES = {
+    'validation.css' => [1, 2, 7],
+    'validation.html' => [1, 5, 7, 11],
+    'validation.js' => [1, 3, 5, 7, 9, 10, 14, 20],
+    'validation.php' => [2, 6, 10, 15]
+  }.freeze
+
+  def setup
+    @scanner = Sinatra::Application.new!
+    config_file = Struct.new(:content).new(Base64.strict_encode64("todo-pr-checker: {}\n"))
+    installation_client = Object.new
+    installation_client.define_singleton_method(:contents) { |*| config_file }
+    @scanner.instance_variable_set(:@installation_client, installation_client)
+    @default_options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+  end
+
+  EXPECTED_ALERT_LINES.each do |file_name, expected_lines|
+    define_method("test_default_options_find_expected_alerts_in_#{file_name.tr('.', '_')}") do
+      fixture_path = File.expand_path("../validation/#{file_name}", __dir__)
+      fixture_lines = File.readlines(fixture_path, chomp: true)
+      expected_count = fixture_lines.filter_map { |line| line[/Alerts with default options: (\d+)/, 1] }.first
+      file_changes = fixture_lines.each_with_index.map do |text, index|
+        { line: index + 1, text: text }
+      end
+
+      todo_changes = @scanner.send(:check_for_todos, { file_name => file_changes }, @default_options)
+      actual_lines = todo_changes.fetch(file_name, []).map { |change| change[:line] }
+
+      refute_nil expected_count
+      assert_equal expected_lines.length, expected_count.to_i
+      assert_equal expected_lines, actual_lines
+    end
+  end
+end
