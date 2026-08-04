@@ -3,6 +3,7 @@
 ## v1.5.1
 
 <!--Releasenotes start-->
+- Added reporting for changed text files that were not checked because their file type is unsupported.
 - Fixed action-item links pointing one line above the actual comment, which produced invalid line-zero links for action items on the first line of a file.
 <!--Releasenotes end-->
 

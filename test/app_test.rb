@@ -13,6 +13,7 @@ require 'rack/test'
 require_relative '../app'
 
 Sinatra::Application.set :test_calls, []
+ORIGINAL_INITIATE_CHECK_RUN = Sinatra::Application.instance_method(:initiate_check_run)
 
 Sinatra::Application.helpers do
   def authenticate_app
@@ -310,7 +311,7 @@ class PullRequestChangeParsingTest < Minitest::Test
 
     options = scanner.send(:get_app_options, 'octocat/example', 'head-sha')
     changes, = scanner.send(:get_pull_request_changes, 'octocat/example', 7, [])
-    todo_changes = scanner.send(:check_for_todos, changes, options)
+    todo_changes, = scanner.send(:check_for_todos, changes, options)
     comment = scanner.send(:create_pr_comment_from_changes, todo_changes, 'octocat/example', 'head-sha', options)
 
     assert_equal [1, 2], changes.fetch('validation.js').map { |change| change[:line] }
@@ -345,12 +346,139 @@ class DefaultValidationFixtureTest < Minitest::Test
         { line: index + 1, text: text }
       end
 
-      todo_changes = @scanner.send(:check_for_todos, { file_name => file_changes }, @default_options)
+      todo_changes, unsupported_files = @scanner.send(:check_for_todos, { file_name => file_changes }, @default_options)
       actual_lines = todo_changes.fetch(file_name, []).map { |change| change[:line] }
 
       refute_nil expected_count
       assert_equal expected_lines.length, expected_count.to_i
       assert_equal expected_lines, actual_lines
+      assert_empty unsupported_files
     end
+  end
+end
+
+class UncheckedFilesReportingTest < Minitest::Test
+  def setup
+    @calls = []
+    @files = []
+    calls = @calls
+    files = @files
+    @config_file = Struct.new(:content).new(Base64.strict_encode64("todo-pr-checker: {}\n"))
+    config_file = @config_file
+    installation_client = Object.new
+    installation_client.define_singleton_method(:contents) { |*| config_file }
+    installation_client.define_singleton_method(:pull_request_files) do |*, page:, **|
+      page == 1 ? files : []
+    end
+    installation_client.define_singleton_method(:issue_comments) { |*, **| [] }
+    installation_client.define_singleton_method(:update_check_run) do |*args, **kwargs|
+      calls << { name: :update_check_run, args: args, kwargs: kwargs }
+    end
+    installation_client.define_singleton_method(:add_comment) do |*args, **kwargs|
+      calls << { name: :add_comment, args: args, kwargs: kwargs }
+    end
+
+    @scanner = Sinatra::Application.new!
+    @scanner.instance_variable_set(:@installation_client, installation_client)
+  end
+
+  def test_includes_unsupported_files_when_posting_action_item_comment
+    @files.concat([
+                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
+                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+TODO: Unsupported\n"),
+                    Struct.new(:filename, :patch).new('README.TXT', "@@ -0,0 +1 @@\n+Unsupported\n"),
+                    Struct.new(:filename, :patch).new('Dockerfile', "@@ -0,0 +1 @@\n+Unsupported\n")
+                  ])
+
+    ORIGINAL_INITIATE_CHECK_RUN.bind_call(@scanner, full_repo_name: 'octocat/example', pull_number: 7, head_sha: 'head-sha', check_run_id: 123)
+
+    comment = @calls.find { |call| call[:name] == :add_comment }
+    final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
+
+    assert_includes comment[:args][2], 'Files not checked (3)'
+    assert_includes comment[:args][2], "</summary>\n<br>\n\n**Unsupported file types**"
+    assert_includes comment[:args][2], '`.txt` (2)'
+    assert_includes comment[:args][2], 'No extension (1)'
+    refute_includes comment[:args][2], '**`.txt` (2)**'
+    assert_includes comment[:args][2], 'notes.txt'
+    assert_includes comment[:args][2], "</details>\n\n----"
+    assert_includes final_check[:kwargs].dig(:output, :text), 'notes.txt'
+  end
+
+  def test_does_not_create_comment_for_unchecked_files_without_action_items
+    @files.concat([
+                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
+                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+                  ])
+
+    ORIGINAL_INITIATE_CHECK_RUN.bind_call(@scanner, full_repo_name: 'octocat/example', pull_number: 7, head_sha: 'head-sha', check_run_id: 123)
+
+    final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
+
+    refute @calls.any? { |call| call[:name] == :add_comment }
+    assert_equal 'success', final_check[:kwargs][:conclusion]
+    assert_includes final_check[:kwargs].dig(:output, :summary), 'notes.txt'
+  end
+
+  def test_skips_check_when_all_text_changes_are_unsupported
+    @files << Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+
+    ORIGINAL_INITIATE_CHECK_RUN.bind_call(@scanner, full_repo_name: 'octocat/example', pull_number: 7, head_sha: 'head-sha', check_run_id: 123)
+
+    final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
+
+    refute @calls.any? { |call| call[:name] == :add_comment }
+    assert_equal 'skipped', final_check[:kwargs][:conclusion]
+    assert_includes final_check[:kwargs].dig(:output, :summary), 'notes.txt'
+  end
+
+  def test_limits_number_of_reported_unchecked_files
+    @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n")
+    51.times do |index|
+      @files << Struct.new(:filename, :patch).new("notes-#{index}.txt", "@@ -0,0 +1 @@\n+Unsupported text\n")
+    end
+
+    ORIGINAL_INITIATE_CHECK_RUN.bind_call(@scanner, full_repo_name: 'octocat/example', pull_number: 7, head_sha: 'head-sha', check_run_id: 123)
+
+    comment = @calls.find { |call| call[:name] == :add_comment }
+
+    assert_includes comment[:args][2], 'Files not checked (51)'
+    assert_includes comment[:args][2], '`.txt` (51)'
+    assert_includes comment[:args][2], 'notes-49.txt'
+    refute_includes comment[:args][2], 'notes-50.txt'
+    assert_includes comment[:args][2], '...and 1 more.'
+  end
+
+  def test_separates_configured_ignores_from_unsupported_files
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  ignore_files: ['ignored.js']\n")
+    @files.concat([
+                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
+                    Struct.new(:filename, :patch).new('ignored.js', "@@ -0,0 +1 @@\n+// TODO: Ignored\n"),
+                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+                  ])
+
+    ORIGINAL_INITIATE_CHECK_RUN.bind_call(@scanner, full_repo_name: 'octocat/example', pull_number: 7, head_sha: 'head-sha', check_run_id: 123)
+
+    comment = @calls.find { |call| call[:name] == :add_comment }
+
+    assert_includes comment[:args][2], 'Files not checked (2)'
+    assert_includes comment[:args][2], 'Ignored by configuration'
+    assert_includes comment[:args][2], 'ignored.js'
+    assert_includes comment[:args][2], 'Unsupported file types'
+    assert_includes comment[:args][2], '`.txt` (1)'
+    assert_includes comment[:args][2], 'notes.txt'
+  end
+
+  def test_post_comment_never_still_fails_check_without_posting_comment
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  post_comment: never\n")
+    @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n")
+
+    ORIGINAL_INITIATE_CHECK_RUN.bind_call(@scanner, full_repo_name: 'octocat/example', pull_number: 7, head_sha: 'head-sha', check_run_id: 123)
+
+    final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
+
+    refute @calls.any? { |call| call[:name] == :add_comment }
+    assert_equal 'failure', final_check[:kwargs][:conclusion]
+    assert_equal '✘ 1 unresolved action item found!', final_check[:kwargs].dig(:output, :title)
   end
 end
