@@ -1,13 +1,17 @@
 # Changelog
 
-## v1.5.0
+## v1.5.1
 
 <!--Releasenotes start-->
+- Fixed action-item links pointing one line above the actual comment, which produced invalid line-zero links for action items on the first line of a file.
+<!--Releasenotes end-->
+
+## v1.5.0
+
 - Changed the app to run normal checks directly from Pull Request webhook events instead of Check suite requested events.
 - Preserved individual and suite-level check re-runs from the GitHub UI while ignoring unrelated Check run and Check suite events before authenticating with the GitHub API.
 - Changed valid but irrelevant webhook deliveries to return a successful `204` response instead of a `400` error.
 - Corrected the documented environment variable name for the GitHub App identifier.
-<!--Releasenotes end-->
 
 ## v1.4.4
 
