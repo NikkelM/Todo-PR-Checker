@@ -249,13 +249,48 @@ class CommentRenderingOptionsTest < Minitest::Test
   end
 end
 
+class ConfigurationDetailsTest < Minitest::Test
+  def setup
+    @scanner = Sinatra::Application.new!
+  end
+
+  def test_renders_effective_options_as_collapsed_yaml
+    options = {
+      'post_comment' => 'items_found',
+      'check_drafts' => false,
+      'action_items' => ['TODO', 'FIX+ME'],
+      'add_languages' => [['note', ['//', '#'], '/*', '*/']],
+      'ignore_files' => []
+    }
+
+    details = @scanner.send(:create_configuration_details, options)
+
+    assert_includes details, '<summary>Configuration used</summary>'
+    assert_includes details, "```yaml\npost_comment: items_found"
+    assert_includes details, "check_drafts: false"
+    assert_includes details, "- TODO"
+    assert_includes details, "- FIX+ME"
+    assert_includes details, "ignore_files: []"
+    refute_includes details, "---"
+  end
+
+  def test_uses_a_longer_code_fence_when_an_option_contains_backticks
+    details = @scanner.send(:create_configuration_details, 'action_items' => ['```'])
+
+    assert_includes details, "````yaml\n"
+    assert_includes details, "\n````\n"
+  end
+end
+
 class CheckRunConfigurationOptionsTest < Minitest::Test
   def setup
     @calls = []
     @files = []
+    @comments = []
     @content_requests = []
     calls = @calls
     files = @files
+    comments = @comments
     content_requests = @content_requests
     @config_file = Struct.new(:content).new(Base64.strict_encode64("todo-pr-checker: {}\n"))
     config_file = @config_file
@@ -267,12 +302,15 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
     installation_client.define_singleton_method(:pull_request_files) do |*, page:, **|
       page == 1 ? files : []
     end
-    installation_client.define_singleton_method(:issue_comments) { |*, **| [] }
+    installation_client.define_singleton_method(:issue_comments) { |*, **| comments }
     installation_client.define_singleton_method(:update_check_run) do |*args, **kwargs|
       calls << { name: :update_check_run, args: args, kwargs: kwargs }
     end
     installation_client.define_singleton_method(:add_comment) do |*args, **kwargs|
       calls << { name: :add_comment, args: args, kwargs: kwargs }
+    end
+    installation_client.define_singleton_method(:update_comment) do |*args, **kwargs|
+      calls << { name: :update_comment, args: args, kwargs: kwargs }
     end
 
     @scanner = Sinatra::Application.new!
@@ -292,11 +330,10 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
     assert_equal 'success', final_check[:kwargs][:conclusion]
   end
 
-  def test_ignore_files_separates_configured_ignores_from_unsupported_files
-    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  ignore_files: ['ignored.js']\n")
+  def test_post_comment_always_includes_skipped_files_without_action_items
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  post_comment: always\n")
     @files.concat([
-                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
-                    Struct.new(:filename, :patch).new('ignored.js', "@@ -0,0 +1 @@\n+// TODO: Ignored\n"),
+                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
                     Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
                   ])
 
@@ -304,9 +341,46 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
 
     comment = @calls.find { |call| call[:name] == :add_comment }
 
-    assert_includes comment[:args][2], 'Files not checked (2)'
+    assert_includes comment[:args][2], '✔ No action items found!'
+    assert_includes comment[:args][2], 'Skipped files (1)'
+    assert_includes comment[:args][2], 'notes.txt'
+  end
+
+  def test_resolved_comment_includes_skipped_files
+    app = Struct.new(:id).new(816_025)
+    @comments << Struct.new(:id, :performed_via_github_app).new(456, app)
+    @files.concat([
+                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
+                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+                  ])
+
+    run_check
+
+    comment = @calls.find { |call| call[:name] == :update_comment }
+
+    assert_includes comment[:args][2], '✔ All action items have been resolved!'
+    assert_includes comment[:args][2], 'Skipped files (1)'
+    assert_includes comment[:args][2], 'notes.txt'
+  end
+
+  def test_ignore_files_separates_configured_ignores_from_unsupported_files
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  ignore_files: ['ignored.js', 'other.JS']\n")
+    @files.concat([
+                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
+                    Struct.new(:filename, :patch).new('ignored.js', "@@ -0,0 +1 @@\n+// TODO: Ignored\n"),
+                    Struct.new(:filename, :patch).new('other.JS', "@@ -0,0 +1 @@\n+// TODO: Also ignored\n"),
+                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+                  ])
+
+    run_check
+
+    comment = @calls.find { |call| call[:name] == :add_comment }
+
+    assert_includes comment[:args][2], 'Skipped files (3)'
     assert_includes comment[:args][2], 'Ignored by configuration'
+    assert_includes comment[:args][2], '`.js` (2)'
     assert_includes comment[:args][2], 'ignored.js'
+    assert_includes comment[:args][2], 'other.JS'
     assert_includes comment[:args][2], 'Unsupported file types'
     assert_includes comment[:args][2], '`.txt` (1)'
     assert_includes comment[:args][2], 'notes.txt'
@@ -323,6 +397,53 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
     refute @calls.any? { |call| call[:name] == :add_comment }
     assert_equal 'failure', final_check[:kwargs][:conclusion]
     assert_equal '✘ 1 unresolved action item found!', final_check[:kwargs].dig(:output, :title)
+  end
+
+  def test_configuration_is_in_failed_check_details_but_not_pull_request_comment
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  check_inline_comments: true\n")
+    @files.concat([
+                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
+                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+                  ])
+
+    run_check
+
+    comment = @calls.find { |call| call[:name] == :add_comment }
+    final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
+    summary = final_check[:kwargs].dig(:output, :summary)
+    details = final_check[:kwargs].dig(:output, :text)
+
+    assert_includes summary, 'app.js'
+    assert_includes summary, 'Skipped files (1)'
+    assert_includes summary, 'helping maintain this app'
+    refute_includes summary, 'Configuration used'
+    assert_includes details, '<summary>Configuration used</summary>'
+    assert_includes details, 'check_inline_comments: true'
+    refute_includes details, 'app.js'
+    refute_includes details, 'Skipped files'
+    refute_includes details, 'helping maintain this app'
+    refute_includes comment[:args][2], 'Configuration used'
+  end
+
+  def test_configuration_is_in_successful_check_details
+    @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n")
+
+    run_check
+
+    final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
+
+    assert_includes final_check[:kwargs].dig(:output, :text), '<summary>Configuration used</summary>'
+  end
+
+  def test_configuration_is_in_skipped_check_details
+    @files << Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+
+    run_check
+
+    final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
+
+    assert_equal 'skipped', final_check[:kwargs][:conclusion]
+    assert_includes final_check[:kwargs].dig(:output, :text), '<summary>Configuration used</summary>'
   end
 
   def test_preloaded_options_avoid_second_configuration_lookup

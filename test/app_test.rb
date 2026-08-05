@@ -322,7 +322,7 @@ class PullRequestChangeParsingTest < Minitest::Test
   end
 end
 
-class UncheckedFilesReportingTest < Minitest::Test
+class SkippedFilesReportingTest < Minitest::Test
   def setup
     @calls = []
     @files = []
@@ -360,17 +360,18 @@ class UncheckedFilesReportingTest < Minitest::Test
     comment = @calls.find { |call| call[:name] == :add_comment }
     final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
 
-    assert_includes comment[:args][2], 'Files not checked (3)'
+    assert_includes comment[:args][2], 'Skipped files (3)'
     assert_includes comment[:args][2], "</summary>\n<br>\n\n**Unsupported file types**"
     assert_includes comment[:args][2], '`.txt` (2)'
     assert_includes comment[:args][2], 'No extension (1)'
     refute_includes comment[:args][2], '**`.txt` (2)**'
     assert_includes comment[:args][2], 'notes.txt'
     assert_includes comment[:args][2], "</details>\n\n----"
-    assert_includes final_check[:kwargs].dig(:output, :text), 'notes.txt'
+    assert_includes final_check[:kwargs].dig(:output, :summary), 'notes.txt'
+    refute_includes final_check[:kwargs].dig(:output, :text), 'notes.txt'
   end
 
-  def test_does_not_create_comment_for_unchecked_files_without_action_items
+  def test_does_not_create_comment_for_skipped_files_without_action_items
     @files.concat([
                     Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
                     Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
@@ -397,7 +398,7 @@ class UncheckedFilesReportingTest < Minitest::Test
     assert_includes final_check[:kwargs].dig(:output, :summary), 'notes.txt'
   end
 
-  def test_limits_number_of_reported_unchecked_files
+  def test_limits_number_of_reported_skipped_files
     @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n")
     51.times do |index|
       @files << Struct.new(:filename, :patch).new("notes-#{index}.txt", "@@ -0,0 +1 @@\n+Unsupported text\n")
@@ -407,7 +408,7 @@ class UncheckedFilesReportingTest < Minitest::Test
 
     comment = @calls.find { |call| call[:name] == :add_comment }
 
-    assert_includes comment[:args][2], 'Files not checked (51)'
+    assert_includes comment[:args][2], 'Skipped files (51)'
     assert_includes comment[:args][2], '`.txt` (51)'
     assert_includes comment[:args][2], 'notes-49.txt'
     refute_includes comment[:args][2], 'notes-50.txt'
