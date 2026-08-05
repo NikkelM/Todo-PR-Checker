@@ -35,6 +35,39 @@ class DraftPullRequestConfigurationTest < Minitest::Test
   end
 end
 
+class AnnotationConfigurationTest < Minitest::Test
+  def setup
+    @scanner = Sinatra::Application.new!
+    @config_file = Struct.new(:content).new(Base64.strict_encode64("todo-pr-checker: {}\n"))
+    config_file = @config_file
+    installation_client = Object.new
+    installation_client.define_singleton_method(:contents) { |*| config_file }
+    @scanner.instance_variable_set(:@installation_client, installation_client)
+  end
+
+  def test_post_annotations_defaults_to_true
+    options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+
+    assert_equal true, options['post_annotations']
+  end
+
+  def test_post_annotations_accepts_false
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  post_annotations: false\n")
+
+    options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+
+    assert_equal false, options['post_annotations']
+  end
+
+  def test_invalid_post_annotations_uses_default
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  post_annotations: disabled\n")
+
+    options = @scanner.send(:get_app_options, 'octocat/example', 'head-sha')
+
+    assert_equal true, options['post_annotations']
+  end
+end
+
 class ActionItemMatchingOptionsTest < Minitest::Test
   def setup
     @scanner = Sinatra::Application.new!
@@ -397,6 +430,58 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
     refute @calls.any? { |call| call[:name] == :add_comment }
     assert_equal 'failure', final_check[:kwargs][:conclusion]
     assert_equal '✘ 1 unresolved action item found!', final_check[:kwargs].dig(:output, :title)
+    assert_equal [{
+      path: 'app.js',
+      start_line: 1,
+      end_line: 1,
+      annotation_level: 'failure',
+      title: 'Unresolved action item',
+      message: '// TODO: Fix this'
+    }], final_check[:kwargs].dig(:output, :annotations)
+  end
+
+  def test_batches_more_than_fifty_annotations_across_check_updates
+    patch = "@@ -0,0 +1,51 @@\n"
+    patch += (1..51).map { |line| "+// TODO: Item #{line}\n" }.join
+    @files << Struct.new(:filename, :patch).new('app.js', patch)
+
+    run_check
+
+    annotation_updates = @calls.filter do |call|
+      call[:name] == :update_check_run && call[:kwargs].dig(:output, :annotations)
+    end
+
+    assert_equal [50, 1], annotation_updates.map { |call| call[:kwargs].dig(:output, :annotations).length }
+    refute annotation_updates.first[:kwargs].key?(:status)
+    assert_equal 'completed', annotation_updates.last[:kwargs][:status]
+    assert_equal 1, annotation_updates.first[:kwargs].dig(:output, :annotations).first[:start_line]
+    assert_equal 51, annotation_updates.last[:kwargs].dig(:output, :annotations).first[:start_line]
+  end
+
+  def test_post_annotations_false_omits_annotations_without_changing_failure_or_comment
+    @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  post_annotations: false\n")
+    @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n")
+
+    run_check
+
+    final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
+    comment = @calls.find { |call| call[:name] == :add_comment }
+
+    assert_equal 'failure', final_check[:kwargs][:conclusion]
+    refute final_check[:kwargs].dig(:output).key?(:annotations)
+    assert_includes final_check[:kwargs].dig(:output, :text), 'post_annotations: false'
+    assert_includes comment[:args][2], 'app.js'
+    refute @calls.any? { |call| call[:kwargs].dig(:output, :annotations) }
+  end
+
+  def test_successful_check_has_no_annotations
+    @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n")
+
+    run_check
+
+    final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
+
+    refute final_check[:kwargs].dig(:output).key?(:annotations)
   end
 
   def test_configuration_is_in_failed_check_details_but_not_pull_request_comment
