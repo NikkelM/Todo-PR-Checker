@@ -2,6 +2,7 @@
 
 require 'base64'
 require 'dotenv/load'
+require 'erb'
 require 'git'
 require 'json'
 require 'jwt'
@@ -27,6 +28,16 @@ APP_FRIENDLY_NAME = ENV.fetch('APP_FRIENDLY_NAME', 'Todo PR Checker')
 RELEVANT_PULL_REQUEST_ACTIONS = %w[opened synchronize reopened ready_for_review].freeze
 MAX_REPORTED_SKIPPED_FILES = 50
 MAX_ANNOTATIONS_PER_REQUEST = 50
+MARKETPLACE_URL = 'https://github.com/marketplace/todo-pr-checker'
+CREATE_ISSUES_ACTION = 'create_issues'
+SUPPORTED_CHECK_RUN_ACTIONS = [CREATE_ISSUES_ACTION].freeze
+ISSUE_MARKER_PATTERN = /<!-- todo-pr-checker \| (.+?) -->/
+ISSUE_MARKER_NOTE = '<!-- The comment below lets Todo PR Checker recognise which action item this issue belongs to, so it is not created a second time. Please do not remove or edit it. -->'
+MAX_ISSUE_MARKER_TEXT = 150
+MAX_ISSUES_PER_REQUEST = 20
+MAX_CREATED_ISSUES_PER_RUN = 50
+MAX_ISSUE_TITLE_EXCERPT = 50
+MAX_ISSUE_LOOKUP_PAGES = 10
 
 configure :development do
   set :logging, Logger::DEBUG
@@ -60,14 +71,16 @@ post '/' do
     end
   end
 
-  check_run = create_check_run(event_context[:full_repo_name], event_context[:head_sha])
+  # A requested action reuses the existing check run instead of starting a new one
+  check_run_id = event_context[:check_run_id] || create_check_run(event_context[:full_repo_name], event_context[:head_sha]).id
   check_arguments = {
     full_repo_name: event_context[:full_repo_name],
     pull_number: event_context[:pull_number],
     head_sha: event_context[:head_sha],
-    check_run_id: check_run.id
+    check_run_id: check_run_id
   }
   check_arguments[:app_options] = app_options if app_options
+  check_arguments[:requested_action] = event_context[:requested_action] if event_context[:requested_action]
   initiate_check_run(**check_arguments)
 
   200
@@ -94,13 +107,27 @@ helpers do
       check_run = payload['check_run']
       return unless check_run.is_a?(Hash)
       return unless check_run.dig('app', 'id')&.to_s == APP_IDENTIFIER
-      return unless payload['action'] == 'rerequested'
+      return unless %w[rerequested requested_action].include?(payload['action'])
 
       pull_request = check_run['pull_requests']&.first
       return unless pull_request
 
       validate_repository(payload)
       halt 400 unless pull_request['number'] && check_run['head_sha']
+
+      if payload['action'] == 'requested_action'
+        requested_action = payload.dig('requested_action', 'identifier')
+        return unless SUPPORTED_CHECK_RUN_ACTIONS.include?(requested_action)
+
+        return {
+          type: :check_run_requested_action,
+          requested_action: requested_action,
+          full_repo_name: payload['repository']['full_name'],
+          pull_number: pull_request['number'],
+          head_sha: check_run['head_sha'],
+          check_run_id: check_run['id']
+        }
+      end
 
       {
         type: :check_run_rerequested,
@@ -141,7 +168,7 @@ helpers do
   end
 
   # (2) Contains the main logic of the app, checking and reporting on action items in code comments during a CI check
-  def initiate_check_run(full_repo_name:, pull_number:, head_sha:, check_run_id:, app_options: nil)
+  def initiate_check_run(full_repo_name:, pull_number:, head_sha:, check_run_id:, app_options: nil, requested_action: nil)
     # As soon as the run is initiated, mark it as in progress on GitHub
     @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
@@ -152,7 +179,7 @@ helpers do
     comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
     # Get a list of changed lines in the Pull request, grouped by their file name and associated with a line number
-    changes, ignored_files = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
+    changes, ignored_files, last_diff_lines = get_pull_request_changes(full_repo_name, pull_number, app_options['ignore_files'])
 
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes, unsupported_files = check_for_todos(changes, app_options)
@@ -172,7 +199,7 @@ helpers do
         reported_ignored_files.group_by { |file| File.extname(file).downcase }.sort.each do |extension, files|
           group_name = extension.empty? ? 'No extension' : "`#{extension}`"
           skipped_files_string += "#{group_name} (#{ignored_file_groups.fetch(extension).length})\n\n"
-          skipped_files_string += files.map { |file| "- [`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join("\n")
+          skipped_files_string += files.map { |file| "- [#{code_span(file)}](#{blob_link(full_repo_name, head_sha, file)})" }.join("\n")
           skipped_files_string += "\n\n"
         end
       end
@@ -182,7 +209,7 @@ helpers do
         reported_unsupported_files.group_by { |file| File.extname(file).downcase }.sort.each do |extension, files|
           group_name = extension.empty? ? 'No extension' : "`#{extension}`"
           skipped_files_string += "#{group_name} (#{unsupported_file_groups.fetch(extension).length})\n\n"
-          skipped_files_string += files.map { |file| "- [`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join("\n")
+          skipped_files_string += files.map { |file| "- [#{code_span(file)}](#{blob_link(full_repo_name, head_sha, file)})" }.join("\n")
           skipped_files_string += "\n\n"
         end
       end
@@ -211,7 +238,42 @@ helpers do
 
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
-      check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, head_sha, app_options).values_at(:title, :summary, :body)
+      # Set when the user asked for the issues through the check run action, which is honoured even outside of `always`
+      create_issues_now = requested_action == CREATE_ISSUES_ACTION
+
+      # Existing issues are needed both for linking them and for not creating them twice, so they are looked up for
+      # every mode that involves issues, including `links`, which only renders links and never creates anything itself
+      issue_options = app_options
+      if app_options['create_issues'] != 'never' || create_issues_now
+        pull_request_details = fetch_pull_request_details(full_repo_name, pull_number)
+        pull_request_title = pull_request_details[:title]
+
+        # A fork can change the configuration of the Pull Request it opens, so issues are only created based on the
+        # configuration of the branch being merged into, and only if that configuration opted into fork Pull Requests
+        if pull_request_details[:from_fork]
+          base_ref = pull_request_details[:base_ref]
+          issue_options = base_ref ? get_app_options(full_repo_name, base_ref) : app_options.merge('create_issues' => 'never')
+          issue_options = issue_options.merge('create_issues' => 'never') unless issue_options['create_issues_from_forks']
+        end
+
+        # Reused for both linking already existing issues and skipping action items that already have one
+        issues_by_fingerprint = fetch_existing_issues(full_repo_name, pull_request_details[:created_at]) unless issue_options['create_issues'] == 'never'
+      end
+      issues_by_fingerprint ||= {}
+
+      # Issues are only created automatically with `always`, or when the check run action explicitly requested them
+      created_issues = if issue_options['create_issues'] == 'always' || (create_issues_now && issue_options['create_issues'] != 'never')
+                         create_issues_from_changes(todo_changes, full_repo_name, head_sha, pull_number, issue_options, pull_request_title, issues_by_fingerprint, last_diff_lines)
+                       else
+                         []
+                       end
+
+      check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(
+        todo_changes, full_repo_name, head_sha, app_options,
+        pull_number: pull_number, pull_request_title: pull_request_title,
+        issues_by_fingerprint: issues_by_fingerprint, last_diff_lines: last_diff_lines,
+        issue_options: issue_options
+      ).values_at(:title, :summary, :body)
       annotation_batches = if app_options['post_annotations']
                              create_check_annotations(todo_changes).each_slice(MAX_ANNOTATIONS_PER_REQUEST).to_a
                            else
@@ -244,14 +306,18 @@ helpers do
         text: configuration_details
       }
       check_output[:annotations] = annotation_batches.last unless annotation_batches.empty?
-      # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      @installation_client.update_check_run(
-        full_repo_name, check_run_id,
+      check_arguments = {
         status: 'completed',
         conclusion: 'failure',
         output: check_output,
         accept: 'application/vnd.github+json'
-      )
+      }
+      # Offer creating every issue at once, unless this run was started by that action already
+      if issue_options['create_issues'] == 'links' && !create_issues_now
+        check_arguments[:actions] = [{ label: 'Create all issues', description: 'Create an issue for each identified action item', identifier: CREATE_ISSUES_ACTION }]
+      end
+      # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
+      @installation_client.update_check_run(full_repo_name, check_run_id, **check_arguments)
     else
       comment_header = '✔ No action items found!'
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
@@ -311,11 +377,207 @@ helpers do
     end
   end
 
+  # File paths and Pull Request titles are attacker controlled, so they must never be able to break out of Markdown links
+  def blob_link(full_repo_name, head_sha, file)
+    encoded_path = file.to_s.split('/').map { |segment| ERB::Util.url_encode(segment) }.join('/')
+
+    "https://github.com/#{full_repo_name}/blob/#{head_sha}/#{encoded_path}"
+  end
+
+  # Escapes the characters that would end a link label or start raw HTML
+  def escape_markdown(text)
+    text.to_s.gsub(/[\\\[\]<>]/) { |character| "\\#{character}" }
+  end
+
+  # Renders text inside a code span, using a fence long enough to contain any backticks the text holds
+  def code_span(text)
+    value = text.to_s
+    fence = '`' * (value.scan(/`+/).map(&:length).max.to_i + 1)
+
+    "#{fence}#{value.start_with?('`') ? ' ' : ''}#{value}#{value.end_with?('`') ? ' ' : ''}#{fence}"
+  end
+
+  def create_issue_title(file, change)
+    location = "#{File.basename(file)}:#{change[:line]}"
+    excerpt = create_issue_excerpt(change)
+
+    excerpt ? "[#{change[:item]}] #{location} - #{excerpt}" : "[#{change[:item]}] #{location}"
+  end
+
+  # Uses the text following the action item, so the title says what needs to be done instead of only where
+  # The description is taken from the comment the item was found in, so inline code before the comment is never included
+  def create_issue_excerpt(change)
+    text_after_item = change[:description] || change[:text].to_s.split(/(?<!\w)#{Regexp.escape(change[:item].to_s)}(?!\w)/i, 2)[1].to_s
+    excerpt = text_after_item.sub(%r{\*/\s*\z}, '').sub(/-->\s*\z/, '').strip.sub(/\A[:;,\-\s]+/, '').gsub(/\s+/, ' ')
+    return nil if excerpt.empty?
+
+    return excerpt if excerpt.length <= MAX_ISSUE_TITLE_EXCERPT
+
+    "#{excerpt[0, MAX_ISSUE_TITLE_EXCERPT - 1].rstrip}…"
+  end
+
+  # Identifies an action item independently of its line number, so that shifting code does not create a second issue
+  # Kept in plain text so users can see what an issue was created for
+  def create_issue_fingerprint(file, change)
+    parts = [file, change[:item], change[:text]].map do |part|
+      value = part.to_s.gsub('-->', '').strip.gsub(/\s+/, ' ')
+      value.length > MAX_ISSUE_MARKER_TEXT ? "#{value[0, MAX_ISSUE_MARKER_TEXT - 1].rstrip}…" : value
+    end
+
+    "file: #{parts[0]} | item: #{parts[1]} | text: #{parts[2]}"
+  end
+
+  # The body embeds a permalink covering the same lines as the code snippets in the Pull Request comment
+  def create_issue_body(file, change, full_repo_name, head_sha, pull_number, additional_lines, pull_request_title = nil, last_diff_line: nil)
+    file_link = blob_link(full_repo_name, head_sha, file)
+    end_line = snippet_end_line(change[:line], additional_lines, last_diff_line)
+    snippet_link = if end_line <= change[:line]
+                     "#{file_link}#L#{change[:line]}"
+                   else
+                     "#{file_link}#L#{change[:line]}-L#{end_line}"
+                   end
+    pull_request_link = "https://github.com/#{full_repo_name}/pull/#{pull_number}"
+    pull_request_reference = if pull_request_title.nil? || pull_request_title.strip.empty?
+                               pull_request_link
+                             else
+                               "[PR ##{pull_number}: #{escape_markdown(pull_request_title)}](#{pull_request_link})"
+                             end
+
+    "An unresolved action item #{code_span(change[:item])} was found in [#{code_span(file)}](#{file_link}#L#{change[:line]}):\n\n" \
+      "#{snippet_link}\n\n" \
+      "Identified by [Todo PR Checker](#{MARKETPLACE_URL}) in #{pull_request_reference}\n\n" \
+      "_The snippet above links to the commit the action item was found in, and is not updated if the action item moves to a different line._\n" \
+      "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!\n\n" \
+      "#{ISSUE_MARKER_NOTE}\n" \
+      "<!-- todo-pr-checker | #{create_issue_fingerprint(file, change)} -->\n"
+  end
+
+  # Creates a link that opens the new issue form with the title, body and labels already filled in
+  def create_issue_link(full_repo_name, title, body, issue_labels)
+    query = { 'title' => title, 'body' => body }
+    query['labels'] = issue_labels.join(',') unless issue_labels.empty?
+
+    "https://github.com/#{full_repo_name}/issues/new?#{URI.encode_www_form(query)}"
+  end
+
+  # Creates one issue per action item, skipping any action item that already has an issue
+  # Issues are created in batches, so that even Pull Requests with many action items only need a few requests
+  def create_issues_from_changes(todo_changes, full_repo_name, head_sha, pull_number, app_options, pull_request_title = nil, issues_by_fingerprint = {}, last_diff_lines = {})
+    pending_issues = []
+
+    todo_changes.each do |file, changes|
+      changes.each do |change|
+        fingerprint = create_issue_fingerprint(file, change)
+        next if issues_by_fingerprint.key?(fingerprint) || pending_issues.any? { |pending| pending[:fingerprint] == fingerprint }
+
+        pending_issues << {
+          fingerprint: fingerprint,
+          title: create_issue_title(file, change),
+          body: create_issue_body(file, change, full_repo_name, head_sha, pull_number, app_options['additional_lines'], pull_request_title, last_diff_line: last_diff_lines[file])
+        }
+      end
+    end
+    return [] if pending_issues.empty?
+
+    # A single Pull Request should never be able to fill a repository with issues, no matter how many action items it adds
+    pending_issues = pending_issues.first(MAX_CREATED_ISSUES_PER_RUN)
+
+    # A single issue is created through REST, which does not need the repository and label ids
+    if pending_issues.length == 1
+      pending = pending_issues.first
+      issue_arguments = { accept: 'application/vnd.github+json' }
+      issue_arguments[:labels] = app_options['issue_labels'] unless app_options['issue_labels'].empty?
+      issue = @installation_client.create_issue(full_repo_name, pending[:title], pending[:body], **issue_arguments)
+      issues_by_fingerprint[pending[:fingerprint]] = { number: issue.number, url: issue.html_url }
+
+      return [issue]
+    end
+
+    repository = fetch_repository_issue_metadata(full_repo_name, app_options['issue_labels'])
+    created_issues = []
+
+    pending_issues.each_slice(MAX_ISSUES_PER_REQUEST) do |batch|
+      created_issues.concat(create_issue_batch(repository, batch, issues_by_fingerprint))
+    end
+
+    created_issues
+  end
+
+  # Issues are created through GraphQL, which needs the repository and label ids instead of their names
+  # Labels that do not exist in the repository are ignored, as GraphQL cannot create them
+  def fetch_repository_issue_metadata(full_repo_name, issue_labels)
+    owner, name = full_repo_name.split('/')
+    query = 'query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id labels(first: 100) { nodes { id name } } } }'
+    repository = run_graphql(query, owner: owner, name: name).data.repository
+    wanted_labels = issue_labels.map(&:downcase)
+    label_ids = repository.labels.nodes.select { |label| wanted_labels.include?(label.name.downcase) }.map(&:id)
+
+    { id: repository.id, label_ids: label_ids }
+  end
+
+  def create_issue_batch(repository, batch, issues_by_fingerprint)
+    variables = { 'repository' => repository[:id] }
+    variables['labels'] = repository[:label_ids] unless repository[:label_ids].empty?
+    label_argument = repository[:label_ids].empty? ? '' : ', labelIds: $labels'
+
+    definitions = ['$repository: ID!']
+    definitions << '$labels: [ID!]' unless repository[:label_ids].empty?
+    mutations = batch.each_with_index.map do |issue, index|
+      definitions.push("$title#{index}: String!", "$body#{index}: String!")
+      variables["title#{index}"] = issue[:title]
+      variables["body#{index}"] = issue[:body]
+      "issue#{index}: createIssue(input: { repositoryId: $repository, title: $title#{index}, body: $body#{index}#{label_argument} }) { issue { number url } }"
+    end
+
+    response = run_graphql("mutation(#{definitions.join(', ')}) { #{mutations.join(' ')} }", **variables.transform_keys(&:to_sym))
+
+    batch.each_with_index.map do |pending, index|
+      issue = response.data.send("issue#{index}").issue
+      issues_by_fingerprint[pending[:fingerprint]] = { number: issue.number, url: issue.url }
+      issue
+    end
+  end
+
+  def run_graphql(query, **variables)
+    response = @installation_client.post('/graphql', { query: query, variables: variables }.to_json)
+    raise "GraphQL request failed: #{response.errors.map(&:message).join(', ')}" if response.errors
+
+    response
+  end
+
+  # Issues of any state are considered, so that issues the user already closed are not created again
+  # Only issues carrying a marker are requested, and only those created after the Pull Request, as an action item added
+  # by this Pull Request cannot have been reported by an issue that already existed before it
+  # Action items are identified by the marker in the issue body, so renamed issues are still recognised
+  def fetch_existing_issues(full_repo_name, pull_request_created_at = nil)
+    issues_by_fingerprint = {}
+    query = "repo:#{full_repo_name} \"todo-pr-checker\" in:body"
+    query += " created:>=#{pull_request_created_at.utc.iso8601}" if pull_request_created_at.respond_to?(:utc)
+
+    (1..MAX_ISSUE_LOOKUP_PAGES).each do |page|
+      results = @installation_client.search_issues(query, per_page: 100, page: page, accept: 'application/vnd.github+json')
+      items = results.items
+      break if items.nil? || items.empty?
+
+      items.each do |issue|
+        issue.body.to_s.scan(ISSUE_MARKER_PATTERN).flatten.each do |fingerprint|
+          issues_by_fingerprint[fingerprint] ||= { number: issue.number, url: issue.html_url }
+        end
+      end
+      break if items.length < 100
+    end
+
+    issues_by_fingerprint
+  end
+
   # (3) Retrieves the `.github/config.yml` and parses the app's options
   def get_app_options(full_repo_name, head_sha)
     default_options = {
       'post_comment' => 'items_found',
       'post_annotations' => true,
+      'create_issues' => 'never',
+      'create_issues_from_forks' => false,
+      'issue_labels' => [],
       'check_drafts' => false,
       'multiline_comments' => false,
       'action_items' => %w[todo fixme bug],
@@ -331,6 +593,9 @@ helpers do
     accepted_option_values = {
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
       'post_annotations' => ->(value) { [true, false].include?(value) },
+      'create_issues' => ->(value) { %w[never links always].include?(value) },
+      'create_issues_from_forks' => ->(value) { [true, false].include?(value) },
+      'issue_labels' => ->(value) { value.is_a?(Array) && (0..10).include?(value.size) && value.all? { |v| v.is_a?(String) && !v.strip.empty? } },
       'check_drafts' => ->(value) { [true, false].include?(value) },
       'multiline_comments' => ->(value) { [true, false].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) },
@@ -385,6 +650,7 @@ helpers do
 
     changes = {}
     ignored_files = []
+    last_diff_lines = {}
 
     # Paginate through all files in the pull request
     page = 1
@@ -417,12 +683,22 @@ helpers do
             line_number += 1
           end
         end
+        # The diff only covers the changed parts of a file, so this is the last line that is known to exist
+        last_diff_lines[filename] = line_number - 1
       end
 
       page += 1
     end
 
-    [changes, ignored_files]
+    [changes, ignored_files, last_diff_lines]
+  end
+
+  # Code snippets cannot be rendered by GitHub if they reference lines beyond the end of a file
+  def snippet_end_line(start_line, additional_lines, last_diff_line)
+    end_line = start_line + additional_lines
+    return end_line if last_diff_line.nil?
+
+    [end_line, [last_diff_line, start_line].max].min
   end
 
   # (5) Checks changed lines in supported file types for action items in code comments ("Todos")
@@ -439,11 +715,11 @@ helpers do
 
     comment_chars = get_comment_chars(options['add_languages'])
 
-    # Create a regex for each action item
-    regexes = action_items.map do |item|
+    # Create a regex for each action item, keeping the configured value so the matched item can be reported
+    item_regexes = action_items.map do |item|
       escaped_item = Regexp.escape(item)
       regex = standalone_items ? /(?<!\S)#{escaped_item}(?!\S)/ : /(?<!\w)#{escaped_item}(?!\w)/
-      case_sensitive ? regex : Regexp.new(regex.source, Regexp::IGNORECASE)
+      [item, case_sensitive ? regex : Regexp.new(regex.source, Regexp::IGNORECASE)]
     end
 
     # Changes are grouped by file name
@@ -478,7 +754,14 @@ helpers do
         comment_text = in_multiline_comment ? text : text[comment_start_index..] if in_multiline_comment || comment_start_index
 
         # If the line is a comment and contains any action item, add it to the output collection
-        file_todos << line if comment_text && regexes.any? { |regex| comment_text.match(regex) }
+        # The text following the match is kept so descriptions can be taken from the comment only, never from surrounding code
+        if comment_text
+          matched_item, matched_text = item_regexes.filter_map do |item, regex|
+            match = comment_text.match(regex)
+            [item, match.post_match] if match
+          end.first
+        end
+        file_todos << line.merge(item: matched_item, description: matched_text) if matched_item
 
         if !multiline_comments
           in_multiline_comment = false
@@ -544,9 +827,12 @@ helpers do
   end
 
   # (7) Creates a comment text from the found action items, with embedded links to the relevant lines
-  def create_pr_comment_from_changes(todo_changes, full_repo_name, head_sha, app_options)
+  def create_pr_comment_from_changes(todo_changes, full_repo_name, head_sha, app_options, pull_number: nil, pull_request_title: nil, issues_by_fingerprint: {}, last_diff_lines: {}, issue_options: nil)
     additional_lines = app_options['additional_lines']
     always_split_snippets = app_options['always_split_snippets']
+    issue_options ||= app_options
+    create_issue_links = issue_options['create_issues'] == 'links' && !pull_number.nil?
+    issue_labels = issue_options['issue_labels'] || []
 
     number_of_todos = todo_changes.values.flatten.count
     check_run_title = if number_of_todos == 1
@@ -562,16 +848,26 @@ helpers do
 
     comment_body = ''
     todo_changes.each do |file, changes|
-      file_link = "https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file}"
+      file_link = blob_link(full_repo_name, head_sha, file)
       num_items = if changes.count == 1
                     '1 action item'
                   else
                     "#{changes.count} action items"
                   end
-      comment_body += "\n## [`#{file}`](#{file_link}) (#{num_items}):\n"
+      comment_body += "\n## [#{code_span(file)}](#{file_link}) (#{num_items}):\n"
 
       # Sort the changes by their line number, and group those that are close together into one embedded link
       changes.sort_by! { |change| change[:line] }
+
+      # Action items that already have an issue are listed once for the file, the rest are offered per code snippet below
+      tracked_links = changes.filter_map do |change|
+        existing_issue = issues_by_fingerprint[create_issue_fingerprint(file, change)]
+        next unless existing_issue
+
+        "[##{existing_issue[:number]}: #{code_span(change[:item])} on line #{change[:line]}](#{existing_issue[:url]})"
+      end
+      comment_body += "\n📌 Action items tracked in issues: #{tracked_links.join(' · ')}\n" unless tracked_links.empty?
+
       grouped_changes = if always_split_snippets
                           changes.map { |change| [change] }
                         else
@@ -580,16 +876,47 @@ helpers do
 
       grouped_changes.each do |group|
         first_line = group.first[:line]
-        last_line = group.last[:line]
-        comment_body += if first_line == last_line && additional_lines.zero?
-                          "https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file}#L#{first_line} "
+        last_line = snippet_end_line(group.last[:line], additional_lines, last_diff_lines[file])
+        comment_body += if first_line >= last_line
+                          "\n#{file_link}#L#{first_line}\n"
                         else
-                          "https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file}#L#{first_line}-L#{last_line + additional_lines} "
+                          "\n#{file_link}#L#{first_line}-L#{last_line}\n"
                         end
+
+        next unless create_issue_links
+
+        creation_links = group.filter_map do |change|
+          next if issues_by_fingerprint.key?(create_issue_fingerprint(file, change))
+
+          issue_title = create_issue_title(file, change)
+          issue_body = create_issue_body(file, change, full_repo_name, head_sha, pull_number, additional_lines, pull_request_title, last_diff_line: last_diff_lines[file])
+          "[#{code_span(change[:item])} on line #{change[:line]}](#{create_issue_link(full_repo_name, issue_title, issue_body, issue_labels)})"
+        end
+        next if creation_links.empty?
+
+        creation_label = creation_links.length == 1 ? 'Create an issue for' : 'Create issues for'
+        comment_body += "\n📝 #{creation_label} #{creation_links.join(' · ')}\n"
       end
     end
 
     { title: check_run_title, summary: comment_summary, body: comment_body }
+  end
+
+  # The Pull Request is only needed for issues, so a failure must not fail the check
+  # Whether the Pull Request comes from a fork decides if its configuration can be trusted to create issues
+  def fetch_pull_request_details(full_repo_name, pull_number)
+    pull_request = @installation_client.pull_request(full_repo_name, pull_number, accept: 'application/vnd.github+json')
+
+    {
+      title: pull_request.title,
+      created_at: pull_request.created_at,
+      base_ref: pull_request.base&.ref,
+      from_fork: pull_request.head&.repo&.full_name.to_s != full_repo_name
+    }
+  rescue StandardError => e
+    logger.debug "Could not fetch the Pull Request: #{e}"
+    # Without the Pull Request the origin of the configuration cannot be established, so no issues are created
+    { from_fork: true }
   end
 
   # (8) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil

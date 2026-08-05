@@ -10,9 +10,13 @@
 - Added the used configuration to each completed check run's details.
 - Added check run annotations that show unresolved action items on their changed lines.
 - Added a `post_annotations` option, enabled by default, to add check run/code annotations for each identified action item.
+- Added a `create_issues` option, disabled by default, to create issues for unresolved action items, either through links and a check run button, or automatically.
+- Added an `issue_labels` option to add labels to issues created by the app.
+- Added a `create_issues_from_forks` option, disabled by default, controlling whether Pull Requests from forks may create issues.
 - Changed the default value of `multiline_comments` to `false`, matching the documented safer behavior for partial Pull Request diffs.
 - Fixed configured action items containing regular expression characters not being matched correctly.
 - Fixed action-item links pointing one line above the actual comment, which produced invalid line-zero links for action items on the first line of a file.
+- Fixed code snippets not rendering for action items close to the end of a file, by shortening the snippet to the last line that exists.
 <!--Releasenotes end-->
 
 ## v1.5.0

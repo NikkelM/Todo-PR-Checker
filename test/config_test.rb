@@ -249,8 +249,24 @@ class CommentRenderingOptionsTest < Minitest::Test
       { 'additional_lines' => 2, 'always_split_snippets' => false }
     )
 
-    assert_includes no_context[:body], 'example.js#L5 '
-    assert_includes two_context_lines[:body], 'example.js#L5-L7 '
+    assert_includes no_context[:body], 'example.js#L5'
+    assert_includes two_context_lines[:body], 'example.js#L5-L7'
+  end
+
+  def test_snippet_does_not_extend_past_the_last_line_of_a_file
+    changes = { 'example.js' => [{ line: 5, text: '// TODO', item: 'TODO' }] }
+
+    clamped = @scanner.send(
+      :create_pr_comment_from_changes,
+      changes,
+      'octocat/example',
+      'head-sha',
+      { 'additional_lines' => 2, 'always_split_snippets' => false },
+      last_diff_lines: { 'example.js' => 5 }
+    )
+
+    assert_includes clamped[:body], 'example.js#L5'
+    refute_includes clamped[:body], '#L5-L7'
   end
 
   def test_always_split_snippets_separates_nearby_items
@@ -276,9 +292,9 @@ class CommentRenderingOptionsTest < Minitest::Test
       { 'additional_lines' => 1, 'always_split_snippets' => true }
     )
 
-    assert_includes grouped[:body], 'example.js#L2-L5 '
-    assert_includes split[:body], 'example.js#L2-L3 '
-    assert_includes split[:body], 'example.js#L4-L5 '
+    assert_includes grouped[:body], 'example.js#L2-L5'
+    assert_includes split[:body], 'example.js#L2-L3'
+    assert_includes split[:body], 'example.js#L4-L5'
   end
 end
 
