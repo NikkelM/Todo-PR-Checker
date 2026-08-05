@@ -25,7 +25,7 @@ GITHUB_WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
 APP_IDENTIFIER = ENV.fetch('GITHUB_APP_IDENTIFIER', nil)
 APP_FRIENDLY_NAME = ENV.fetch('APP_FRIENDLY_NAME', 'Todo PR Checker')
 RELEVANT_PULL_REQUEST_ACTIONS = %w[opened synchronize reopened ready_for_review].freeze
-MAX_REPORTED_UNCHECKED_FILES = 50
+MAX_REPORTED_SKIPPED_FILES = 50
 
 configure :development do
   set :logging, Logger::DEBUG
@@ -146,7 +146,7 @@ helpers do
 
     # Get the options for the app from the `.github/config.yml` file in the repository
     app_options ||= get_app_options(full_repo_name, head_sha)
-    # logger.debug app_options
+    configuration_details = create_configuration_details(app_options)
 
     comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
 
@@ -156,32 +156,37 @@ helpers do
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes, unsupported_files = check_for_todos(changes, app_options)
 
-    unchecked_files_string = ''
+    skipped_files_string = ''
     unless ignored_files.empty? && unsupported_files.empty?
-      remaining_file_limit = MAX_REPORTED_UNCHECKED_FILES
+      remaining_file_limit = MAX_REPORTED_SKIPPED_FILES
       reported_ignored_files = ignored_files.first(remaining_file_limit)
       remaining_file_limit -= reported_ignored_files.length
       reported_unsupported_files = unsupported_files.first(remaining_file_limit)
       omitted_file_count = ignored_files.length + unsupported_files.length - reported_ignored_files.length - reported_unsupported_files.length
 
-      unchecked_files_string = "\n\n<details>\n<summary>Files not checked (#{ignored_files.length + unsupported_files.length})</summary>\n<br>\n\n"
+      skipped_files_string = "\n\n<details>\n<summary>Skipped files (#{ignored_files.length + unsupported_files.length})</summary>\n<br>\n\n"
       unless reported_ignored_files.empty?
-        unchecked_files_string += "**Ignored by configuration**\n\n"
-        unchecked_files_string += reported_ignored_files.map { |file| "- [`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join("\n")
-        unchecked_files_string += "\n\n"
+        skipped_files_string += "**Ignored by configuration**\n\n"
+        ignored_file_groups = ignored_files.group_by { |file| File.extname(file).downcase }
+        reported_ignored_files.group_by { |file| File.extname(file).downcase }.sort.each do |extension, files|
+          group_name = extension.empty? ? 'No extension' : "`#{extension}`"
+          skipped_files_string += "#{group_name} (#{ignored_file_groups.fetch(extension).length})\n\n"
+          skipped_files_string += files.map { |file| "- [`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join("\n")
+          skipped_files_string += "\n\n"
+        end
       end
       unless reported_unsupported_files.empty?
-        unchecked_files_string += "**Unsupported file types**\n\n"
+        skipped_files_string += "**Unsupported file types**\n\n"
         unsupported_file_groups = unsupported_files.group_by { |file| File.extname(file).downcase }
         reported_unsupported_files.group_by { |file| File.extname(file).downcase }.sort.each do |extension, files|
           group_name = extension.empty? ? 'No extension' : "`#{extension}`"
-          unchecked_files_string += "#{group_name} (#{unsupported_file_groups.fetch(extension).length})\n\n"
-          unchecked_files_string += files.map { |file| "- [`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join("\n")
-          unchecked_files_string += "\n\n"
+          skipped_files_string += "#{group_name} (#{unsupported_file_groups.fetch(extension).length})\n\n"
+          skipped_files_string += files.map { |file| "- [`#{file}`](https://github.com/#{full_repo_name}/blob/#{head_sha}/#{file})" }.join("\n")
+          skipped_files_string += "\n\n"
         end
       end
-      unchecked_files_string += "_...and #{omitted_file_count} more._\n\n" if omitted_file_count.positive?
-      unchecked_files_string += "</details>\n"
+      skipped_files_string += "_...and #{omitted_file_count} more._\n\n" if omitted_file_count.positive?
+      skipped_files_string += "</details>\n"
     end
 
     # If there are no supported changes, mark the run as skipped and return early
@@ -190,7 +195,11 @@ helpers do
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'skipped',
-        output: { title: '✔ No changed files found!', summary: "No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.#{unchecked_files_string}#{comment_footer}" },
+        output: {
+          title: '✔ No changed files found!',
+          summary: "No matching file types were changed with this Pull Request. If any are added later on, the bot will make sure to let you know.#{skipped_files_string}#{comment_footer}",
+          text: configuration_details
+        },
         accept: 'application/vnd.github+json'
       )
       return
@@ -207,13 +216,23 @@ helpers do
       if app_options['post_comment'] != 'never'
         # Post or update the comment with the found action items
         if app_comment
-          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_summary}#{comment_body}#{unchecked_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_summary}#{comment_body}#{skipped_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_summary}#{comment_body}#{unchecked_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_summary}#{comment_body}#{skipped_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
         end
       end
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
-      @installation_client.update_check_run(full_repo_name, check_run_id, status: 'completed', conclusion: 'failure', output: { title: check_run_title, summary: comment_summary, text: "#{comment_body}#{unchecked_files_string}#{comment_footer}" }, accept: 'application/vnd.github+json')
+      @installation_client.update_check_run(
+        full_repo_name, check_run_id,
+        status: 'completed',
+        conclusion: 'failure',
+        output: {
+          title: check_run_title,
+          summary: "#{comment_summary}#{comment_body}#{skipped_files_string}#{comment_footer}",
+          text: configuration_details
+        },
+        accept: 'application/vnd.github+json'
+      )
     else
       comment_header = '✔ No action items found!'
       # If the app has previously created a comment, update it to indicate that all action items have been resolved
@@ -221,9 +240,9 @@ helpers do
       if app_comment || app_options['post_comment'] == 'always'
         if app_comment
           comment_header = '✔ All action items have been resolved!'
-          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_header}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_header}#{skipped_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_header}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_header}#{skipped_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
         end
       end
 
@@ -232,7 +251,11 @@ helpers do
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'success',
-        output: { title: comment_header, summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.#{unchecked_files_string}#{comment_footer}" },
+        output: {
+          title: comment_header,
+          summary: "There are no new action items added in this Pull Request. If any are added later on, the bot will make sure to let you know.#{skipped_files_string}#{comment_footer}",
+          text: configuration_details
+        },
         accept: 'application/vnd.github+json'
       )
     end
@@ -246,6 +269,12 @@ helpers do
       output: { title: 'An internal error has occurred!', summary: 'If this keeps happening, please report it [here](https://github.com/NikkelM/Todo-PR-Checker/issues).', text: e.message },
       accept: 'application/vnd.github+json'
     )
+  end
+
+  def create_configuration_details(app_options)
+    yaml = YAML.dump(app_options).delete_prefix("---\n")
+    fence = '`' * [3, yaml.scan(/`+/).map(&:length).max.to_i + 1].max
+    "\n\n<details>\n<summary>Configuration used</summary>\n\n#{fence}yaml\n#{yaml}#{fence}\n\n</details>\n"
   end
 
   # (3) Retrieves the `.github/config.yml` and parses the app's options
