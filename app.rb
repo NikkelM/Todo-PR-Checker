@@ -26,6 +26,7 @@ APP_IDENTIFIER = ENV.fetch('GITHUB_APP_IDENTIFIER', nil)
 APP_FRIENDLY_NAME = ENV.fetch('APP_FRIENDLY_NAME', 'Todo PR Checker')
 RELEVANT_PULL_REQUEST_ACTIONS = %w[opened synchronize reopened ready_for_review].freeze
 MAX_REPORTED_SKIPPED_FILES = 50
+MAX_ANNOTATIONS_PER_REQUEST = 50
 
 configure :development do
   set :logging, Logger::DEBUG
@@ -211,6 +212,11 @@ helpers do
     # If any action items were found, create/update a comment on the Pull Request with embedded links to the relevant lines
     if todo_changes.any?
       check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(todo_changes, full_repo_name, head_sha, app_options).values_at(:title, :summary, :body)
+      annotation_batches = if app_options['post_annotations']
+                             create_check_annotations(todo_changes).each_slice(MAX_ANNOTATIONS_PER_REQUEST).to_a
+                           else
+                             []
+                           end
 
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
@@ -221,16 +227,29 @@ helpers do
           @installation_client.add_comment(full_repo_name, pull_number, "#{comment_summary}#{comment_body}#{skipped_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
         end
       end
+      annotation_batches[0...-1].each do |annotations|
+        @installation_client.update_check_run(
+          full_repo_name, check_run_id,
+          output: {
+            title: check_run_title,
+            summary: comment_summary,
+            annotations: annotations
+          },
+          accept: 'application/vnd.github+json'
+        )
+      end
+      check_output = {
+        title: check_run_title,
+        summary: "#{comment_summary}#{comment_body}#{skipped_files_string}#{comment_footer}",
+        text: configuration_details
+      }
+      check_output[:annotations] = annotation_batches.last unless annotation_batches.empty?
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
       @installation_client.update_check_run(
         full_repo_name, check_run_id,
         status: 'completed',
         conclusion: 'failure',
-        output: {
-          title: check_run_title,
-          summary: "#{comment_summary}#{comment_body}#{skipped_files_string}#{comment_footer}",
-          text: configuration_details
-        },
+        output: check_output,
         accept: 'application/vnd.github+json'
       )
     else
@@ -277,10 +296,26 @@ helpers do
     "\n\n<details>\n<summary>Configuration used</summary>\n\n#{fence}yaml\n#{yaml}#{fence}\n\n</details>\n"
   end
 
+  def create_check_annotations(todo_changes)
+    todo_changes.flat_map do |path, changes|
+      changes.map do |change|
+        {
+          path: path,
+          start_line: change[:line],
+          end_line: change[:line],
+          annotation_level: 'failure',
+          title: 'Unresolved action item',
+          message: change[:text].strip
+        }
+      end
+    end
+  end
+
   # (3) Retrieves the `.github/config.yml` and parses the app's options
   def get_app_options(full_repo_name, head_sha)
     default_options = {
       'post_comment' => 'items_found',
+      'post_annotations' => true,
       'check_drafts' => false,
       'multiline_comments' => false,
       'action_items' => %w[todo fixme bug],
@@ -295,6 +330,7 @@ helpers do
 
     accepted_option_values = {
       'post_comment' => ->(value) { %w[items_found always never].include?(value) },
+      'post_annotations' => ->(value) { [true, false].include?(value) },
       'check_drafts' => ->(value) { [true, false].include?(value) },
       'multiline_comments' => ->(value) { [true, false].include?(value) },
       'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) },

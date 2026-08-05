@@ -56,6 +56,7 @@ To get started, you can copy the `.github/config.yml` file from this repository 
 | Option | Possible Values | Description | Default |
 | --- | --- | --- | --- |
 | `post_comment` | `items_found`, `always`, `never` | Controls when the app should post a comment. By default, a comment is only posted if an action item has been found. If set to `never`, the check will still fail. If set to `always`, the app will post a comment that all action items have been resolved if none are found. | `items_found` |
+| `post_annotations` | `true`, `false` | Controls whether the app should annotate changed lines containing unresolved action items. | `true` |
 | `check_drafts` | `true`, `false` | Controls whether draft Pull Requests are checked. | `false` |
 | `ignore_files` | `string[]`, maximum 7 entries | A list of glob patterns to specify files that should be ignored during the check. You may specify up to 7 patterns. The pattern matching logic used is the same as for `.gitignore` files. | `null` |
 | `action_items` | `string[]`, maximum 15 entries | A list of action items to look for in code comments. If you set this option, the default values will be overwritten, so you must include them in your list to use them. By default, action items are case insensitive. You may specify up to 15 items. | `['TODO', 'FIXME', 'BUG']` |
