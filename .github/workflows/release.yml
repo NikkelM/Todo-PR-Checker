@@ -17,12 +17,11 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_sha == github.sha
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Set up Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           fetch-depth: 2
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -31,26 +30,19 @@ jobs:
         id: get_version
         run: |
           echo "version=$(grep -oP '\K\d+\.\d+\.\d+' version.rb)" >> $GITHUB_OUTPUT
-      
+
       - name: Get previous version
         id: get_previous_version
-        uses: pozetroninc/github-action-get-latest-release@master
-        with:
-          repository: ${{ github.repository }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Extract version number
-        id: extract_version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          version=${{ steps.get_previous_version.outputs.release }}
-          version=${version#v}
-          echo "version=$version" >> $GITHUB_OUTPUT
-        shell: bash
-      
+          version=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq '.tagName' 2>/dev/null || echo "")
+          echo "version=${version#v}" >> $GITHUB_OUTPUT
+
       - name: Check if version changed
         id: check_version
         run: |
-          if [ -n "${{ steps.extract_version.outputs.version }}" ] && [ "${{ steps.get_version.outputs.version }}" != "${{ steps.extract_version.outputs.version }}" ]; then
+          if [ -n "${{ steps.get_previous_version.outputs.version }}" ] && [ "${{ steps.get_version.outputs.version }}" != "${{ steps.get_previous_version.outputs.version }}" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
           else
             echo "changed=false" >> $GITHUB_OUTPUT
@@ -68,7 +60,7 @@ jobs:
 
     steps:
       - name: Set up Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -84,7 +76,7 @@ jobs:
           **[Full Changelog](CHANGELOG.md)**" >> RELEASE_NOTES.md
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

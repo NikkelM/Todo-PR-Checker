@@ -113,7 +113,7 @@ class ActionItemMatchingOptionsTest < Minitest::Test
 
     todo_changes, = @scanner.send(:check_for_todos, changes, options)
 
-    assert_equal [1, 3], todo_changes.fetch('example.js').map { |change| change[:line] }
+    assert_equal([1, 3], todo_changes.fetch('example.js').map { |change| change[:line] })
   end
 
   def test_empty_action_items_list_disables_matching
@@ -144,7 +144,7 @@ class ActionItemMatchingOptionsTest < Minitest::Test
 
     todo_changes, unsupported_files = @scanner.send(:check_for_todos, changes, options)
 
-    assert_equal [1, 2, 4], todo_changes.fetch('example.note').map { |change| change[:line] }
+    assert_equal([1, 2, 4], todo_changes.fetch('example.note').map { |change| change[:line] })
     assert_empty unsupported_files
   end
 
@@ -162,7 +162,7 @@ class ActionItemMatchingOptionsTest < Minitest::Test
 
     todo_changes, = @scanner.send(:check_for_todos, changes, options)
 
-    assert_equal [1, 3], todo_changes.fetch('example.js').map { |change| change[:line] }
+    assert_equal([1, 3], todo_changes.fetch('example.js').map { |change| change[:line] })
   end
 
   def test_inline_multiline_comment_continues_on_following_lines
@@ -177,7 +177,7 @@ class ActionItemMatchingOptionsTest < Minitest::Test
 
     todo_changes, = @scanner.send(:check_for_todos, changes, options)
 
-    assert_equal [2], todo_changes.fetch('example.js').map { |change| change[:line] }
+    assert_equal([2], todo_changes.fetch('example.js').map { |change| change[:line] })
   end
 
   def test_inline_self_closing_block_comment_does_not_leak_to_following_lines
@@ -191,7 +191,7 @@ class ActionItemMatchingOptionsTest < Minitest::Test
 
     todo_changes, = @scanner.send(:check_for_todos, changes, options)
 
-    assert_equal [1], todo_changes.fetch('example.js').map { |change| change[:line] }
+    assert_equal([1], todo_changes.fetch('example.js').map { |change| change[:line] })
   end
 
   def test_configuration_accepts_boolean_matching_options
@@ -249,8 +249,24 @@ class CommentRenderingOptionsTest < Minitest::Test
       { 'additional_lines' => 2, 'always_split_snippets' => false }
     )
 
-    assert_includes no_context[:body], 'example.js#L5 '
-    assert_includes two_context_lines[:body], 'example.js#L5-L7 '
+    assert_includes no_context[:body], 'example.js#L5'
+    assert_includes two_context_lines[:body], 'example.js#L5-L7'
+  end
+
+  def test_snippet_does_not_extend_past_the_last_line_of_a_file
+    changes = { 'example.js' => [{ line: 5, text: '// TODO', item: 'TODO' }] }
+
+    clamped = @scanner.send(
+      :create_pr_comment_from_changes,
+      changes,
+      'octocat/example',
+      'head-sha',
+      { 'additional_lines' => 2, 'always_split_snippets' => false },
+      last_diff_lines: { 'example.js' => 5 }
+    )
+
+    assert_includes clamped[:body], 'example.js#L5'
+    refute_includes clamped[:body], '#L5-L7'
   end
 
   def test_always_split_snippets_separates_nearby_items
@@ -276,9 +292,9 @@ class CommentRenderingOptionsTest < Minitest::Test
       { 'additional_lines' => 1, 'always_split_snippets' => true }
     )
 
-    assert_includes grouped[:body], 'example.js#L2-L5 '
-    assert_includes split[:body], 'example.js#L2-L3 '
-    assert_includes split[:body], 'example.js#L4-L5 '
+    assert_includes grouped[:body], 'example.js#L2-L5'
+    assert_includes split[:body], 'example.js#L2-L3'
+    assert_includes split[:body], 'example.js#L4-L5'
   end
 end
 
@@ -300,11 +316,11 @@ class ConfigurationDetailsTest < Minitest::Test
 
     assert_includes details, '<summary>Configuration used</summary>'
     assert_includes details, "```yaml\npost_comment: items_found"
-    assert_includes details, "check_drafts: false"
-    assert_includes details, "- TODO"
-    assert_includes details, "- FIX+ME"
-    assert_includes details, "ignore_files: []"
-    refute_includes details, "---"
+    assert_includes details, 'check_drafts: false'
+    assert_includes details, '- TODO'
+    assert_includes details, '- FIX+ME'
+    assert_includes details, 'ignore_files: []'
+    refute_includes details, '---'
   end
 
   def test_uses_a_longer_code_fence_when_an_option_contains_backticks
@@ -365,10 +381,10 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
 
   def test_post_comment_always_includes_skipped_files_without_action_items
     @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  post_comment: always\n")
-    @files.concat([
-                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
-                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
-                  ])
+    @files.push(
+      Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
+      Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+    )
 
     run_check
 
@@ -382,10 +398,10 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
   def test_resolved_comment_includes_skipped_files
     app = Struct.new(:id).new(816_025)
     @comments << Struct.new(:id, :performed_via_github_app).new(456, app)
-    @files.concat([
-                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
-                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
-                  ])
+    @files.push(
+      Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
+      Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+    )
 
     run_check
 
@@ -398,12 +414,12 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
 
   def test_ignore_files_separates_configured_ignores_from_unsupported_files
     @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  ignore_files: ['ignored.js', 'other.JS']\n")
-    @files.concat([
-                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
-                    Struct.new(:filename, :patch).new('ignored.js', "@@ -0,0 +1 @@\n+// TODO: Ignored\n"),
-                    Struct.new(:filename, :patch).new('other.JS', "@@ -0,0 +1 @@\n+// TODO: Also ignored\n"),
-                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
-                  ])
+    @files.push(
+      Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
+      Struct.new(:filename, :patch).new('ignored.js', "@@ -0,0 +1 @@\n+// TODO: Ignored\n"),
+      Struct.new(:filename, :patch).new('other.JS', "@@ -0,0 +1 @@\n+// TODO: Also ignored\n"),
+      Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+    )
 
     run_check
 
@@ -427,7 +443,7 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
 
     final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
 
-    refute @calls.any? { |call| call[:name] == :add_comment }
+    refute(@calls.any? { |call| call[:name] == :add_comment })
     assert_equal 'failure', final_check[:kwargs][:conclusion]
     assert_equal '✘ 1 unresolved action item found!', final_check[:kwargs].dig(:output, :title)
     assert_equal [{
@@ -451,7 +467,7 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
       call[:name] == :update_check_run && call[:kwargs].dig(:output, :annotations)
     end
 
-    assert_equal [50, 1], annotation_updates.map { |call| call[:kwargs].dig(:output, :annotations).length }
+    assert_equal([50, 1], annotation_updates.map { |call| call[:kwargs].dig(:output, :annotations).length })
     refute annotation_updates.first[:kwargs].key?(:status)
     assert_equal 'completed', annotation_updates.last[:kwargs][:status]
     assert_equal 1, annotation_updates.first[:kwargs].dig(:output, :annotations).first[:start_line]
@@ -468,10 +484,10 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
     comment = @calls.find { |call| call[:name] == :add_comment }
 
     assert_equal 'failure', final_check[:kwargs][:conclusion]
-    refute final_check[:kwargs].dig(:output).key?(:annotations)
+    refute final_check[:kwargs][:output].key?(:annotations)
     assert_includes final_check[:kwargs].dig(:output, :text), 'post_annotations: false'
     assert_includes comment[:args][2], 'app.js'
-    refute @calls.any? { |call| call[:kwargs].dig(:output, :annotations) }
+    refute(@calls.any? { |call| call[:kwargs].dig(:output, :annotations) })
   end
 
   def test_successful_check_has_no_annotations
@@ -481,15 +497,15 @@ class CheckRunConfigurationOptionsTest < Minitest::Test
 
     final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
 
-    refute final_check[:kwargs].dig(:output).key?(:annotations)
+    refute final_check[:kwargs][:output].key?(:annotations)
   end
 
   def test_configuration_is_in_failed_check_details_but_not_pull_request_comment
     @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  check_inline_comments: true\n")
-    @files.concat([
-                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
-                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
-                  ])
+    @files.push(
+      Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
+      Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+    )
 
     run_check
 

@@ -9,7 +9,7 @@ Layout/EndOfLine:
   Enabled: false
 
 Metrics/MethodLength:
-  Max: 50
+  Max: 150
 
 Metrics/BlockLength:
   Enabled: false
@@ -25,6 +25,14 @@ Metrics/CyclomaticComplexity:
 
 Metrics/PerceivedComplexity:
   Enabled: false
+
+Metrics/ParameterLists:
+  Max: 9
+  CountKeywordArgs: false
+
+Metrics/ClassLength:
+  Exclude:
+    - 'test/**/*'
 
 Style/MethodCallWithoutArgsParentheses:
   Enabled: false

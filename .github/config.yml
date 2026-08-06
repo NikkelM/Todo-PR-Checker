@@ -3,6 +3,13 @@ todo-pr-checker:
   post_comment: 'items_found'
   # Whether or not annotations should be posted on lines containing action items
   post_annotations: true
+  # Whether issues should be created for action items: 'never', 'links' or 'always'
+  # 'links' adds an issue creation link per action item, 'always' creates them automatically
+  create_issues: 'never'
+  # Whether Pull Requests opened from a fork may create issues in this repository
+  create_issues_from_forks: false
+  # Labels to add to issues created by the app
+  issue_labels: []
   # Whether or not draft Pull Requests should be checked
   check_drafts: false
   # Files that get matched by any of these glob patterns will be ignored

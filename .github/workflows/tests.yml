@@ -26,3 +26,6 @@ jobs:
 
       - name: Run tests
         run: bundle exec ruby -Itest -e "Dir['test/**/*_test.rb'].sort.each { |file| require File.expand_path(file) }"
+
+      - name: Check code style
+        run: bundle exec rubocop

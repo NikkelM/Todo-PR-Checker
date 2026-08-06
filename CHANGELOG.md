@@ -3,6 +3,8 @@
 ## v2.0.0
 
 <!--Releasenotes start-->
+**This release requires the `Issues: Read and write` permission, which you will be asked to approve.** The permission is only used if you enable the new `create_issues` option, which is disabled by default - the app keeps working as before until you do.
+
 - Added reporting for changed text files that were not checked because their file type is unsupported.
 - Added a `check_inline_comments` option, disabled by default, to check comments appearing after code on the same line.
 - Added a `standalone_items` option, disabled by default, to require action items to be surrounded by whitespace.
@@ -10,9 +12,23 @@
 - Added the used configuration to each completed check run's details.
 - Added check run annotations that show unresolved action items on their changed lines.
 - Added a `post_annotations` option, enabled by default, to add check run/code annotations for each identified action item.
+- Added a `create_issues` option, disabled by default, to create issues for unresolved action items, either through links and a check run action, or automatically.
+- Added an `issue_labels` option to add labels to issues created by the app.
+- Added a `create_issues_from_forks` option, disabled by default, controlling whether Pull Requests from forks may create issues.
 - Changed the default value of `multiline_comments` to `false`, matching the documented safer behavior for partial Pull Request diffs.
+- Changed Pull Requests from forks to be checked using the configuration of the branch they are being merged into, so that a fork cannot weaken or disable the check it is subject to.
+- Changed `ignore_files` patterns to follow `.gitignore` conventions, as documented. Patterns are now anchored, so a pattern such as `*.js` no longer also ignores e.g. `.json` files.
+- Fixed the documented default of `action_items` not matching the actual default, which caused the uppercase `TODO`, `FIXME` and `BUG` items to not be found when `case_sensitive` was enabled.
+- Fixed `add_languages` entries with a `null` line comment being rejected, which silently discarded all configured languages.
+- Fixed a malformed or unrelated `.github/config.yml` failing the check instead of falling back to the default options.
+- Fixed added lines starting with a `+` not being checked for action items.
+- Fixed files with uppercase extensions and extensionless files such as `.gitignore` not being checked.
+- Fixed the app not finding its own comment on Pull Requests with more than 30 comments, which created a duplicate comment.
 - Fixed configured action items containing regular expression characters not being matched correctly.
 - Fixed action-item links pointing one line above the actual comment, which produced invalid line-zero links for action items on the first line of a file.
+- Fixed code snippets not rendering for action items close to the end of a file, by shortening the snippet to the last line that exists.
+- Fixed Pull Requests with many action items failing to report at all, by shortening the comment and check run summary to the length GitHub accepts.
+- Fixed Perl assignments being treated as the start of a block comment when `multiline_comments` was enabled.
 <!--Releasenotes end-->
 
 ## v1.5.0
