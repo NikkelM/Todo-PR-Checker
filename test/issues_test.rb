@@ -168,7 +168,7 @@ class IssueContentInjectionTest < Minitest::Test
 
     # The closing bracket is escaped, so the label continues and the attacker's destination stays literal text
     assert_includes body, '[PR #7: Fix the thing\\](https://evil.example) \\[x](https://github.com/octocat/example/pull/7)'
-    refute_match(/\[PR #7[^\]]*[^\\]\]\(https:\/\/evil/, body)
+    refute_match(%r{\[PR #7[^\]]*[^\\]\]\(https://evil}, body)
   end
 
   def test_file_path_cannot_break_out_of_the_link_destination
@@ -273,8 +273,8 @@ class IssueCreationTest < Minitest::Test
     created = @calls.select { |call| call[:name] == :create_issue }
 
     assert_equal 2, created.length
-    assert_equal '[todo] app.js:1 - First', created.first[:args][1]
-    assert_equal '[fixme] app.js:3 - Second', created.last[:args][1]
+    assert_equal '[TODO] app.js:1 - First', created.first[:args][1]
+    assert_equal '[FIXME] app.js:3 - Second', created.last[:args][1]
   end
 
   def test_never_does_not_create_issues_or_offer_the_action
@@ -286,7 +286,7 @@ class IssueCreationTest < Minitest::Test
     final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
     comment = @calls.find { |call| call[:name] == :add_comment }
 
-    refute @calls.any? { |call| call[:name] == :create_issue }
+    refute(@calls.any? { |call| call[:name] == :create_issue })
     refute final_check[:kwargs].key?(:actions)
     refute_includes comment[:args][2], 'issues/new'
   end
@@ -300,9 +300,9 @@ class IssueCreationTest < Minitest::Test
     final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
     comment = @calls.find { |call| call[:name] == :add_comment }
 
-    refute @calls.any? { |call| call[:name] == :create_issue }
+    refute(@calls.any? { |call| call[:name] == :create_issue })
     assert_includes comment[:args][2], 'https://github.com/octocat/example/issues/new?'
-    assert_includes comment[:args][2], 'Create an issue for [`todo` on line 1]'
+    assert_includes comment[:args][2], 'Create an issue for [`TODO` on line 1]'
     assert_equal [{ label: 'Create all issues', description: 'Create an issue for each identified action item', identifier: 'create_issues' }], final_check[:kwargs][:actions]
   end
 
@@ -314,22 +314,22 @@ class IssueCreationTest < Minitest::Test
 
     comment = @calls.find { |call| call[:name] == :add_comment }
 
-    assert_includes comment[:args][2], 'Create issues for [`todo` on line 1]'
-    assert_includes comment[:args][2], '· [`fixme` on line 2]'
+    assert_includes comment[:args][2], 'Create issues for [`TODO` on line 1]'
+    assert_includes comment[:args][2], '· [`FIXME` on line 2]'
     refute_includes comment[:args][2], 'Create an issue for'
   end
 
   def test_creation_links_are_only_offered_for_untracked_items
     @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  create_issues: links\n")
-    @issues << existing_issue(11, 'Tracking issue', fingerprint_for('app.js', 'todo', '// TODO: First'))
+    @issues << existing_issue(11, 'Tracking issue', fingerprint_for('app.js', 'TODO', '// TODO: First'))
     @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1,2 @@\n+// TODO: First\n+// FIXME: Second\n")
 
     run_check
 
     comment = @calls.find { |call| call[:name] == :add_comment }
 
-    assert_includes comment[:args][2], 'Action items tracked in issues: [#11: `todo` on line 1]'
-    assert_includes comment[:args][2], 'Create an issue for [`fixme` on line 2]'
+    assert_includes comment[:args][2], 'Action items tracked in issues: [#11: `TODO` on line 1]'
+    assert_includes comment[:args][2], 'Create an issue for [`FIXME` on line 2]'
   end
 
   def test_requested_action_creates_issues_and_removes_the_action
@@ -340,13 +340,13 @@ class IssueCreationTest < Minitest::Test
 
     final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
 
-    assert_equal 1, @calls.count { |call| call[:name] == :create_issue }
+    assert_equal(1, @calls.count { |call| call[:name] == :create_issue })
     refute final_check[:kwargs].key?(:actions)
-    assert_match(/Action items tracked in issues: \[#\d+: `todo` on line 1\]/, final_check[:kwargs].dig(:output, :summary))
+    assert_match(/Action items tracked in issues: \[#\d+: `TODO` on line 1\]/, final_check[:kwargs].dig(:output, :summary))
   end
 
   def test_existing_issues_are_not_created_again
-    @issues << existing_issue(11, 'Anything the user renamed it to', fingerprint_for('app.js', 'todo', '// TODO: First'))
+    @issues << existing_issue(11, 'Anything the user renamed it to', fingerprint_for('app.js', 'TODO', '// TODO: First'))
     @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1,3 @@\n+// TODO: First\n+const value = true;\n+// FIXME: Second\n")
 
     run_check
@@ -354,28 +354,28 @@ class IssueCreationTest < Minitest::Test
     created = @calls.select { |call| call[:name] == :create_issue }
 
     assert_equal 1, created.length
-    assert_includes created.first[:args][1], '[fixme]'
+    assert_includes created.first[:args][1], '[FIXME]'
   end
 
   def test_shifted_line_numbers_do_not_create_a_second_issue
-    @issues << existing_issue(11, '[todo] app.js:1 - First', fingerprint_for('app.js', 'todo', '// TODO: First'))
+    @issues << existing_issue(11, '[TODO] app.js:1 - First', fingerprint_for('app.js', 'TODO', '// TODO: First'))
     @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1,3 @@\n+const value = true;\n+const other = false;\n+// TODO: First\n")
 
     run_check
 
-    refute @calls.any? { |call| call[:name] == :create_issue }
+    refute(@calls.any? { |call| call[:name] == :create_issue })
   end
 
   def test_comment_links_existing_issues_instead_of_offering_to_create_them
     @config_file.content = Base64.strict_encode64("todo-pr-checker:\n  create_issues: links\n")
-    @issues << existing_issue(11, 'Tracking issue', fingerprint_for('app.js', 'todo', '// TODO: First'))
+    @issues << existing_issue(11, 'Tracking issue', fingerprint_for('app.js', 'TODO', '// TODO: First'))
     @files << Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: First\n")
 
     run_check
 
     comment = @calls.find { |call| call[:name] == :add_comment }
 
-    assert_includes comment[:args][2], 'Action items tracked in issues: [#11: `todo` on line 1](https://github.com/octocat/example/issues/11)'
+    assert_includes comment[:args][2], 'Action items tracked in issues: [#11: `TODO` on line 1](https://github.com/octocat/example/issues/11)'
     refute_includes comment[:args][2], 'issues/new?'
   end
 
@@ -386,7 +386,7 @@ class IssueCreationTest < Minitest::Test
 
     comment = @calls.find { |call| call[:name] == :add_comment }
 
-    assert_match(%r{Action items tracked in issues: \[#\d+: `todo` on line 1\]\(https://github\.com/octocat/example/issues/\d+\)}, comment[:args][2])
+    assert_match(%r{Action items tracked in issues: \[#\d+: `TODO` on line 1\]\(https://github\.com/octocat/example/issues/\d+\)}, comment[:args][2])
     refute_includes comment[:args][2], 'Created 1 issue'
     assert_equal 1, @searches.length
   end
@@ -398,24 +398,24 @@ class IssueCreationTest < Minitest::Test
 
     created = @calls.find { |call| call[:name] == :create_issue }
 
-    assert_includes created[:args][2], '<!-- todo-pr-checker | file: app.js | item: todo | text: // TODO: Fix this -->'
+    assert_includes created[:args][2], '<!-- todo-pr-checker | file: app.js | item: TODO | text: // TODO: Fix this -->'
     assert_includes created[:args][2], 'Please do not remove or edit it.'
     assert_includes created[:args][2], 'Identified by [Todo PR Checker]'
     assert_includes created[:args][2], 'is not updated if the action item moves to a different line'
   end
 
   def test_existing_issues_are_looked_up_with_a_single_search_request
-    @files.concat([
-                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: First\n"),
-                    Struct.new(:filename, :patch).new('other.js', "@@ -0,0 +1 @@\n+// FIXME: Second\n")
-                  ])
+    @files.push(
+      Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: First\n"),
+      Struct.new(:filename, :patch).new('other.js', "@@ -0,0 +1 @@\n+// FIXME: Second\n")
+    )
 
     run_check
 
     assert_equal 1, @searches.length
     assert_includes @searches.first, 'repo:octocat/example'
     assert_includes @searches.first, 'in:body'
-    assert_equal 2, @calls.count { |call| call[:name] == :create_issue }
+    assert_equal(2, @calls.count { |call| call[:name] == :create_issue })
   end
 
   def test_configured_labels_are_applied_to_created_issues
@@ -445,8 +445,8 @@ class IssueCreationTest < Minitest::Test
 
     run_check
 
-    assert_equal 1, @calls.count { |call| call[:name] == :create_issue }
-    refute @calls.any? { |call| call[:name] == :graphql }
+    assert_equal(1, @calls.count { |call| call[:name] == :create_issue })
+    refute(@calls.any? { |call| call[:name] == :graphql })
   end
 
   def test_a_single_issue_with_labels_also_uses_one_request
@@ -457,7 +457,7 @@ class IssueCreationTest < Minitest::Test
 
     created = @calls.find { |call| call[:name] == :create_issue }
 
-    refute @calls.any? { |call| call[:name] == :graphql }
+    refute(@calls.any? { |call| call[:name] == :graphql })
     assert_equal ['todo'], created[:kwargs][:labels]
   end
 
@@ -471,7 +471,7 @@ class IssueCreationTest < Minitest::Test
     graphql_calls = @calls.select { |call| call[:name] == :graphql }
     mutations = graphql_calls.reject { |call| call[:kwargs]['query'].start_with?('query') }
 
-    assert_equal 5, @calls.count { |call| call[:name] == :create_issue }
+    assert_equal(5, @calls.count { |call| call[:name] == :create_issue })
     assert_equal 1, mutations.length
     assert_equal 2, graphql_calls.length
   end
@@ -483,7 +483,7 @@ class IssueCreationTest < Minitest::Test
 
     run_check
 
-    assert_equal 50, @calls.count { |call| call[:name] == :create_issue }
+    assert_equal(50, @calls.count { |call| call[:name] == :create_issue })
   end
 
   def test_issues_are_not_created_without_action_items
@@ -491,7 +491,7 @@ class IssueCreationTest < Minitest::Test
 
     run_check
 
-    refute @calls.any? { |call| call[:name] == :create_issue }
+    refute(@calls.any? { |call| call[:name] == :create_issue })
   end
 
   private
@@ -526,7 +526,7 @@ class ForkConfigurationTest < Minitest::Test
     files = @files
     @head_config = "todo-pr-checker:\n  create_issues: always\n"
     @base_config = "todo-pr-checker: {}\n"
-    configs = -> (ref) { ref == 'main' ? @base_config : @head_config }
+    configs = ->(ref) { ref == 'main' ? @base_config : @head_config }
     @configs = configs
     @head_repo = 'attacker/example'
     head_repo = -> { @head_repo }
@@ -545,7 +545,7 @@ class ForkConfigurationTest < Minitest::Test
         Struct.new(:ref).new('main'), Struct.new(:repo).new(repo)
       )
     end
-    installation_client.define_singleton_method(:search_issues) do |*, page:, **|
+    installation_client.define_singleton_method(:search_issues) do |*, **|
       Struct.new(:items).new([])
     end
     installation_client.define_singleton_method(:update_check_run) do |*args, **kwargs|
@@ -567,13 +567,13 @@ class ForkConfigurationTest < Minitest::Test
   def test_a_fork_cannot_enable_issue_creation_through_its_own_configuration
     run_check
 
-    refute @calls.any? { |call| call[:name] == :create_issue }
+    refute(@calls.any? { |call| call[:name] == :create_issue })
   end
 
   def test_a_fork_cannot_create_issues_through_the_check_run_action
     run_check(requested_action: 'create_issues')
 
-    refute @calls.any? { |call| call[:name] == :create_issue }
+    refute(@calls.any? { |call| call[:name] == :create_issue })
   end
 
   def test_forks_do_not_create_issues_unless_the_base_configuration_opts_in
@@ -581,7 +581,7 @@ class ForkConfigurationTest < Minitest::Test
 
     run_check
 
-    refute @calls.any? { |call| call[:name] == :create_issue }
+    refute(@calls.any? { |call| call[:name] == :create_issue })
   end
 
   def test_the_base_configuration_decides_whether_a_fork_may_create_issues
@@ -590,17 +590,17 @@ class ForkConfigurationTest < Minitest::Test
 
     run_check
 
-    assert_equal 1, @calls.count { |call| call[:name] == :create_issue }
+    assert_equal(1, @calls.count { |call| call[:name] == :create_issue })
   end
 
-  def test_a_fork_disabling_issue_creation_is_respected
-    # The fork can only ever reduce what happens, never enable issue creation the base branch did not ask for
+  def test_a_fork_cannot_weaken_the_check_through_its_own_configuration
+    # The fork's own configuration is ignored entirely, so it can neither enable nor disable anything
     @base_config = "todo-pr-checker:\n  create_issues: always\n  create_issues_from_forks: true\n"
-    @head_config = "todo-pr-checker: {}\n"
+    @head_config = "todo-pr-checker:\n  create_issues: never\n  ignore_files: ['*']\n"
 
     run_check
 
-    refute @calls.any? { |call| call[:name] == :create_issue }
+    assert_equal(1, @calls.count { |call| call[:name] == :create_issue })
   end
 
   def test_a_pull_request_from_the_same_repository_does_not_need_the_fork_option
@@ -608,7 +608,7 @@ class ForkConfigurationTest < Minitest::Test
 
     run_check
 
-    assert_equal 1, @calls.count { |call| call[:name] == :create_issue }
+    assert_equal(1, @calls.count { |call| call[:name] == :create_issue })
   end
 
   private
@@ -702,7 +702,7 @@ class IssueDescriptionSourceTest < Minitest::Test
     todo_changes, = @scanner.send(:check_for_todos, changes, @options)
     title = @scanner.send(:create_issue_title, 'example.js', todo_changes.fetch('example.js').first)
 
-    assert_equal '[todo] example.js:1 - drop the legacy branch', title
+    assert_equal '[TODO] example.js:1 - drop the legacy branch', title
   end
 
   def test_multiline_comment_excerpt_uses_the_comment_text
@@ -718,7 +718,7 @@ class IssueDescriptionSourceTest < Minitest::Test
     todo_changes, = @scanner.send(:check_for_todos, changes, options)
     title = @scanner.send(:create_issue_title, 'example.js', todo_changes.fetch('example.js').first)
 
-    assert_equal '[todo] example.js:2 - finish the migration', title
+    assert_equal '[TODO] example.js:2 - finish the migration', title
   end
 
   def test_self_closing_block_comment_excerpt_drops_the_closing_delimiter
@@ -727,6 +727,6 @@ class IssueDescriptionSourceTest < Minitest::Test
     todo_changes, = @scanner.send(:check_for_todos, changes, @options)
     title = @scanner.send(:create_issue_title, 'example.js', todo_changes.fetch('example.js').first)
 
-    assert_equal '[todo] example.js:4 - remove the flag', title
+    assert_equal '[TODO] example.js:4 - remove the flag', title
   end
 end

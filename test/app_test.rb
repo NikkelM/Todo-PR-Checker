@@ -27,13 +27,16 @@ class WebhookTest < Minitest::Test
     }
   end
 
-  def pull_request_payload(action, draft: false)
+  def pull_request_payload(action, draft: false, head_repo: 'octocat/example')
     base_payload.merge(
       'action' => action,
       'pull_request' => {
         'number' => 7,
         'draft' => draft,
-        'head' => { 'sha' => 'head-sha' }
+        'title' => 'Add the new parser',
+        'created_at' => '2026-08-05T12:00:00Z',
+        'base' => { 'ref' => 'main' },
+        'head' => { 'sha' => 'head-sha', 'repo' => { 'full_name' => head_repo } }
       }
     )
   end
@@ -85,9 +88,23 @@ class WebhookRoutingTest < WebhookTest
         full_repo_name: 'octocat/example',
         pull_number: 7,
         head_sha: 'head-sha',
-        check_run_id: 123
+        check_run_id: 123,
+        pull_request_details: {
+          title: 'Add the new parser',
+          created_at: '2026-08-05T12:00:00Z',
+          base_ref: 'main',
+          from_fork: false
+        }
       }]
     ], app.settings.test_calls
+  end
+
+  def test_a_fork_pull_request_is_marked_as_such
+    post_webhook('pull_request', pull_request_payload('opened', head_repo: 'attacker/example'))
+
+    initiate_call = app.settings.test_calls.find { |call| call.first == :initiate_check_run }
+
+    assert_equal true, initiate_call[1].dig(:pull_request_details, :from_fork)
   end
 
   def test_processes_pull_request_synchronization
@@ -316,7 +333,7 @@ class PullRequestChangeParsingTest < Minitest::Test
     todo_changes, = scanner.send(:check_for_todos, changes, options)
     comment = scanner.send(:create_pr_comment_from_changes, todo_changes, 'octocat/example', 'head-sha', options)
 
-    assert_equal [1, 2], changes.fetch('validation.js').map { |change| change[:line] }
+    assert_equal([1, 2], changes.fetch('validation.js').map { |change| change[:line] })
     assert_includes comment[:body], 'validation.js#L1-L2'
     refute_includes comment[:body], '#L0'
   end
@@ -348,12 +365,12 @@ class SkippedFilesReportingTest < Minitest::Test
   end
 
   def test_includes_unsupported_files_when_posting_action_item_comment
-    @files.concat([
-                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
-                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+TODO: Unsupported\n"),
-                    Struct.new(:filename, :patch).new('README.TXT', "@@ -0,0 +1 @@\n+Unsupported\n"),
-                    Struct.new(:filename, :patch).new('Dockerfile', "@@ -0,0 +1 @@\n+Unsupported\n")
-                  ])
+    @files.push(
+      Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+// TODO: Fix this\n"),
+      Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+TODO: Unsupported\n"),
+      Struct.new(:filename, :patch).new('README.TXT', "@@ -0,0 +1 @@\n+Unsupported\n"),
+      Struct.new(:filename, :patch).new('Dockerfile', "@@ -0,0 +1 @@\n+Unsupported\n")
+    )
 
     ORIGINAL_INITIATE_CHECK_RUN.bind_call(@scanner, full_repo_name: 'octocat/example', pull_number: 7, head_sha: 'head-sha', check_run_id: 123)
 
@@ -372,16 +389,16 @@ class SkippedFilesReportingTest < Minitest::Test
   end
 
   def test_does_not_create_comment_for_skipped_files_without_action_items
-    @files.concat([
-                    Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
-                    Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
-                  ])
+    @files.push(
+      Struct.new(:filename, :patch).new('app.js', "@@ -0,0 +1 @@\n+const value = true;\n"),
+      Struct.new(:filename, :patch).new('notes.txt', "@@ -0,0 +1 @@\n+Unsupported text\n")
+    )
 
     ORIGINAL_INITIATE_CHECK_RUN.bind_call(@scanner, full_repo_name: 'octocat/example', pull_number: 7, head_sha: 'head-sha', check_run_id: 123)
 
     final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
 
-    refute @calls.any? { |call| call[:name] == :add_comment }
+    refute(@calls.any? { |call| call[:name] == :add_comment })
     assert_equal 'success', final_check[:kwargs][:conclusion]
     assert_includes final_check[:kwargs].dig(:output, :summary), 'notes.txt'
   end
@@ -393,7 +410,7 @@ class SkippedFilesReportingTest < Minitest::Test
 
     final_check = @calls.reverse.find { |call| call[:name] == :update_check_run }
 
-    refute @calls.any? { |call| call[:name] == :add_comment }
+    refute(@calls.any? { |call| call[:name] == :add_comment })
     assert_equal 'skipped', final_check[:kwargs][:conclusion]
     assert_includes final_check[:kwargs].dig(:output, :summary), 'notes.txt'
   end
@@ -414,5 +431,4 @@ class SkippedFilesReportingTest < Minitest::Test
     refute_includes comment[:args][2], 'notes-50.txt'
     assert_includes comment[:args][2], '...and 1 more.'
   end
-
 end

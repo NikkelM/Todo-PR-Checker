@@ -14,6 +14,10 @@ The information transmitted through these webhooks is secured by GitHub, and onl
 The webhooks contain information pertaining to the action you took, such as the file changes in a Pull Request.
 The app uses this data to perform its function, and for no other reason.
 
+Depending on the configuration you provide in your repository, the app writes content back to your repository as part of its function.
+This is limited to check runs and their annotations, comments on Pull Requests, and, if you enable the `create_issues` option, issues describing the action items that were found.
+Content is only ever written to the repository the webhook originated from, and only contains information derived from that repository and the Pull Request being checked.
+
 The app does not persist any data beyond the duration of a request (where a "request" hereby is the reception, processing of, and response to, a webhook as described above), and does not store any data in any form.
 
 # Do third parties see and/or have access to information obtained by the app?

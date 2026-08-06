@@ -1,7 +1,10 @@
 .github/
 development/
+test/
 validation/
 .dockerignore
+.env
+*.pem
 .gitattributes
 .gitignore
 .rubocop.yml
@@ -11,4 +14,3 @@ LICENSE
 POSTINSTALL.md
 PRIVACY.md
 README.md
-development/

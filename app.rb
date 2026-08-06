@@ -3,11 +3,9 @@
 require 'base64'
 require 'dotenv/load'
 require 'erb'
-require 'git'
 require 'json'
 require 'jwt'
 require 'logger'
-require 'net/http'
 require 'octokit'
 require 'openssl'
 require 'sinatra'
@@ -28,6 +26,9 @@ APP_FRIENDLY_NAME = ENV.fetch('APP_FRIENDLY_NAME', 'Todo PR Checker')
 RELEVANT_PULL_REQUEST_ACTIONS = %w[opened synchronize reopened ready_for_review].freeze
 MAX_REPORTED_SKIPPED_FILES = 50
 MAX_ANNOTATIONS_PER_REQUEST = 50
+MAX_ANNOTATIONS_PER_RUN = 500
+# GitHub rejects check run output longer than 65535 bytes, and comments longer than 65536 characters
+MAX_REPORT_BYTES = 65_000
 MARKETPLACE_URL = 'https://github.com/marketplace/todo-pr-checker'
 CREATE_ISSUES_ACTION = 'create_issues'
 SUPPORTED_CHECK_RUN_ACTIONS = [CREATE_ISSUES_ACTION].freeze
@@ -38,6 +39,7 @@ MAX_ISSUES_PER_REQUEST = 20
 MAX_CREATED_ISSUES_PER_RUN = 50
 MAX_ISSUE_TITLE_EXCERPT = 50
 MAX_ISSUE_LOOKUP_PAGES = 10
+MAX_COMMENT_LOOKUP_PAGES = 10
 
 configure :development do
   set :logging, Logger::DEBUG
@@ -81,6 +83,7 @@ post '/' do
   }
   check_arguments[:app_options] = app_options if app_options
   check_arguments[:requested_action] = event_context[:requested_action] if event_context[:requested_action]
+  check_arguments[:pull_request_details] = event_context[:pull_request_details] if event_context[:pull_request_details]
   initiate_check_run(**check_arguments)
 
   200
@@ -101,7 +104,14 @@ helpers do
         full_repo_name: payload['repository']['full_name'],
         pull_number: pull_request['number'],
         head_sha: pull_request.dig('head', 'sha'),
-        draft: pull_request['draft'] == true
+        draft: pull_request['draft'] == true,
+        # Taken from the event so that the common case does not need an extra request to identify a fork
+        pull_request_details: {
+          title: pull_request['title'],
+          created_at: pull_request['created_at'],
+          base_ref: pull_request.dig('base', 'ref'),
+          from_fork: pull_request.dig('head', 'repo', 'full_name').to_s != payload['repository']['full_name']
+        }
       }
     when 'check_run'
       check_run = payload['check_run']
@@ -161,6 +171,13 @@ helpers do
     halt 400 unless repository.is_a?(Hash) && repository['full_name'].is_a?(String) && !repository['full_name'].empty?
   end
 
+  # Logging must never be the reason a check fails, and the logger is only available while serving a request
+  def debug_log(message)
+    logger.debug(message)
+  rescue StandardError
+    nil
+  end
+
   # (1) Creates an empty check run on GitHub associated with the most recent commit
   def create_check_run(full_repo_name, head_sha)
     # Create a new check run to report on the progress of the app, and associate it with the most recent commit
@@ -168,12 +185,17 @@ helpers do
   end
 
   # (2) Contains the main logic of the app, checking and reporting on action items in code comments during a CI check
-  def initiate_check_run(full_repo_name:, pull_number:, head_sha:, check_run_id:, app_options: nil, requested_action: nil)
+  def initiate_check_run(full_repo_name:, pull_number:, head_sha:, check_run_id:, app_options: nil, requested_action: nil, pull_request_details: nil)
     # As soon as the run is initiated, mark it as in progress on GitHub
     @installation_client.update_check_run(full_repo_name, check_run_id, status: 'in_progress', accept: 'application/vnd.github+json')
 
     # Get the options for the app from the `.github/config.yml` file in the repository
     app_options ||= get_app_options(full_repo_name, head_sha)
+    pull_request_details ||= fetch_pull_request_details(full_repo_name, pull_number)
+
+    # The configuration of a Pull Request opened from a fork is written by whoever opened it, so it must not be able to
+    # weaken the check itself. The configuration of the branch being merged into decides how the Pull Request is checked
+    app_options = get_app_options(full_repo_name, pull_request_details[:base_ref]) if pull_request_details[:from_fork] && pull_request_details[:base_ref]
     configuration_details = create_configuration_details(app_options)
 
     comment_footer = "\n----\nDid I do good? Let me know by [helping maintain this app](https://github.com/sponsors/NikkelM)!"
@@ -184,38 +206,7 @@ helpers do
     # Filter the changed lines for only those that contain action items ("Todos"), and group them by file
     todo_changes, unsupported_files = check_for_todos(changes, app_options)
 
-    skipped_files_string = ''
-    unless ignored_files.empty? && unsupported_files.empty?
-      remaining_file_limit = MAX_REPORTED_SKIPPED_FILES
-      reported_ignored_files = ignored_files.first(remaining_file_limit)
-      remaining_file_limit -= reported_ignored_files.length
-      reported_unsupported_files = unsupported_files.first(remaining_file_limit)
-      omitted_file_count = ignored_files.length + unsupported_files.length - reported_ignored_files.length - reported_unsupported_files.length
-
-      skipped_files_string = "\n\n<details>\n<summary>Skipped files (#{ignored_files.length + unsupported_files.length})</summary>\n<br>\n\n"
-      unless reported_ignored_files.empty?
-        skipped_files_string += "**Ignored by configuration**\n\n"
-        ignored_file_groups = ignored_files.group_by { |file| File.extname(file).downcase }
-        reported_ignored_files.group_by { |file| File.extname(file).downcase }.sort.each do |extension, files|
-          group_name = extension.empty? ? 'No extension' : "`#{extension}`"
-          skipped_files_string += "#{group_name} (#{ignored_file_groups.fetch(extension).length})\n\n"
-          skipped_files_string += files.map { |file| "- [#{code_span(file)}](#{blob_link(full_repo_name, head_sha, file)})" }.join("\n")
-          skipped_files_string += "\n\n"
-        end
-      end
-      unless reported_unsupported_files.empty?
-        skipped_files_string += "**Unsupported file types**\n\n"
-        unsupported_file_groups = unsupported_files.group_by { |file| File.extname(file).downcase }
-        reported_unsupported_files.group_by { |file| File.extname(file).downcase }.sort.each do |extension, files|
-          group_name = extension.empty? ? 'No extension' : "`#{extension}`"
-          skipped_files_string += "#{group_name} (#{unsupported_file_groups.fetch(extension).length})\n\n"
-          skipped_files_string += files.map { |file| "- [#{code_span(file)}](#{blob_link(full_repo_name, head_sha, file)})" }.join("\n")
-          skipped_files_string += "\n\n"
-        end
-      end
-      skipped_files_string += "_...and #{omitted_file_count} more._\n\n" if omitted_file_count.positive?
-      skipped_files_string += "</details>\n"
-    end
+    skipped_files_string = render_skipped_files(ignored_files, unsupported_files, full_repo_name, head_sha)
 
     # If there are no supported changes, mark the run as skipped and return early
     if (changes.keys - unsupported_files).empty?
@@ -240,33 +231,22 @@ helpers do
     if todo_changes.any?
       # Set when the user asked for the issues through the check run action, which is honoured even outside of `always`
       create_issues_now = requested_action == CREATE_ISSUES_ACTION
+      pull_request_title = pull_request_details[:title]
+
+      # The configuration is already the one of the branch being merged into, so a fork only needs the extra opt in
+      issue_options = app_options
+      issue_options = issue_options.merge('create_issues' => 'never') if pull_request_details[:from_fork] && !app_options['create_issues_from_forks']
 
       # Existing issues are needed both for linking them and for not creating them twice, so they are looked up for
       # every mode that involves issues, including `links`, which only renders links and never creates anything itself
-      issue_options = app_options
-      if app_options['create_issues'] != 'never' || create_issues_now
-        pull_request_details = fetch_pull_request_details(full_repo_name, pull_number)
-        pull_request_title = pull_request_details[:title]
-
-        # A fork can change the configuration of the Pull Request it opens, so issues are only created based on the
-        # configuration of the branch being merged into, and only if that configuration opted into fork Pull Requests
-        if pull_request_details[:from_fork]
-          base_ref = pull_request_details[:base_ref]
-          issue_options = base_ref ? get_app_options(full_repo_name, base_ref) : app_options.merge('create_issues' => 'never')
-          issue_options = issue_options.merge('create_issues' => 'never') unless issue_options['create_issues_from_forks']
-        end
-
-        # Reused for both linking already existing issues and skipping action items that already have one
-        issues_by_fingerprint = fetch_existing_issues(full_repo_name, pull_request_details[:created_at]) unless issue_options['create_issues'] == 'never'
-      end
-      issues_by_fingerprint ||= {}
+      issues_by_fingerprint = if issue_options['create_issues'] == 'never'
+                                {}
+                              else
+                                fetch_existing_issues(full_repo_name, pull_request_details[:created_at])
+                              end
 
       # Issues are only created automatically with `always`, or when the check run action explicitly requested them
-      created_issues = if issue_options['create_issues'] == 'always' || (create_issues_now && issue_options['create_issues'] != 'never')
-                         create_issues_from_changes(todo_changes, full_repo_name, head_sha, pull_number, issue_options, pull_request_title, issues_by_fingerprint, last_diff_lines)
-                       else
-                         []
-                       end
+      create_issues_from_changes(todo_changes, full_repo_name, head_sha, pull_number, issue_options, pull_request_title, issues_by_fingerprint, last_diff_lines) if issue_options['create_issues'] == 'always' || (create_issues_now && issue_options['create_issues'] != 'never')
 
       check_run_title, comment_summary, comment_body = create_pr_comment_from_changes(
         todo_changes, full_repo_name, head_sha, app_options,
@@ -274,19 +254,22 @@ helpers do
         issues_by_fingerprint: issues_by_fingerprint, last_diff_lines: last_diff_lines,
         issue_options: issue_options
       ).values_at(:title, :summary, :body)
-      annotation_batches = if app_options['post_annotations']
-                             create_check_annotations(todo_changes).each_slice(MAX_ANNOTATIONS_PER_REQUEST).to_a
+      # Annotations are appended by GitHub, so they must not be sent again when re-running for a requested action
+      annotation_batches = if app_options['post_annotations'] && !create_issues_now
+                             create_check_annotations(todo_changes).first(MAX_ANNOTATIONS_PER_RUN).each_slice(MAX_ANNOTATIONS_PER_REQUEST).to_a
                            else
                              []
                            end
+
+      report_body = truncate_report("#{comment_summary}#{comment_body}#{skipped_files_string}", comment_footer)
 
       # If the user has enabled post_comment in the options
       if app_options['post_comment'] != 'never'
         # Post or update the comment with the found action items
         if app_comment
-          @installation_client.update_comment(full_repo_name, app_comment.id, "#{comment_summary}#{comment_body}#{skipped_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.update_comment(full_repo_name, app_comment.id, report_body, accept: 'application/vnd.github+json')
         else
-          @installation_client.add_comment(full_repo_name, pull_number, "#{comment_summary}#{comment_body}#{skipped_files_string}#{comment_footer}", accept: 'application/vnd.github+json')
+          @installation_client.add_comment(full_repo_name, pull_number, report_body, accept: 'application/vnd.github+json')
         end
       end
       annotation_batches[0...-1].each do |annotations|
@@ -302,7 +285,7 @@ helpers do
       end
       check_output = {
         title: check_run_title,
-        summary: "#{comment_summary}#{comment_body}#{skipped_files_string}#{comment_footer}",
+        summary: report_body,
         text: configuration_details
       }
       check_output[:annotations] = annotation_batches.last unless annotation_batches.empty?
@@ -313,9 +296,7 @@ helpers do
         accept: 'application/vnd.github+json'
       }
       # Offer creating every issue at once, unless this run was started by that action already
-      if issue_options['create_issues'] == 'links' && !create_issues_now
-        check_arguments[:actions] = [{ label: 'Create all issues', description: 'Create an issue for each identified action item', identifier: CREATE_ISSUES_ACTION }]
-      end
+      check_arguments[:actions] = [{ label: 'Create all issues', description: 'Create an issue for each identified action item', identifier: CREATE_ISSUES_ACTION }] if issue_options['create_issues'] == 'links' && !create_issues_now
       # Mark the check run as failed, as action items were found. This enables users to block Pull Requests with unresolved action items
       @installation_client.update_check_run(full_repo_name, check_run_id, **check_arguments)
     else
@@ -356,6 +337,53 @@ helpers do
     )
   end
 
+  # Lists the files that were changed but not checked, so it is always clear what the result does and does not cover
+  def render_skipped_files(ignored_files, unsupported_files, full_repo_name, head_sha)
+    return '' if ignored_files.empty? && unsupported_files.empty?
+
+    reported_ignored_files = ignored_files.first(MAX_REPORTED_SKIPPED_FILES)
+    reported_unsupported_files = unsupported_files.first(MAX_REPORTED_SKIPPED_FILES - reported_ignored_files.length)
+    omitted_file_count = ignored_files.length + unsupported_files.length - reported_ignored_files.length - reported_unsupported_files.length
+
+    skipped_files_string = "\n\n<details>\n<summary>Skipped files (#{ignored_files.length + unsupported_files.length})</summary>\n<br>\n\n"
+    skipped_files_string += render_skipped_group('Ignored by configuration', reported_ignored_files, ignored_files, full_repo_name, head_sha)
+    skipped_files_string += render_skipped_group('Unsupported file types', reported_unsupported_files, unsupported_files, full_repo_name, head_sha)
+    skipped_files_string += "_...and #{omitted_file_count} more._\n\n" if omitted_file_count.positive?
+    skipped_files_string += "</details>\n"
+
+    skipped_files_string
+  end
+
+  # Files are grouped by their extension, with the count of every file in the group, even those that are not listed
+  def render_skipped_group(title, reported_files, all_files, full_repo_name, head_sha)
+    return '' if reported_files.empty?
+
+    group_sizes = all_files.group_by { |file| File.extname(file).downcase }
+    group_string = "**#{title}**\n\n"
+    reported_files.group_by { |file| File.extname(file).downcase }.sort.each do |extension, files|
+      group_name = extension.empty? ? 'No extension' : "`#{extension}`"
+      group_string += "#{group_name} (#{group_sizes.fetch(extension).length})\n\n"
+      group_string += files.map { |file| "- [#{code_span(file)}](#{blob_link(full_repo_name, head_sha, file)})" }.join("\n")
+      group_string += "\n\n"
+    end
+
+    group_string
+  end
+
+  # Keeps the rendered report within the limit GitHub accepts, so that a large Pull Request still gets a result
+  def truncate_report(body, footer)
+    return "#{body}#{footer}" if body.bytesize + footer.bytesize <= MAX_REPORT_BYTES
+
+    notice = "\n\n_The list of action items was shortened because it is too long to display._\n"
+    available = MAX_REPORT_BYTES - footer.bytesize - notice.bytesize
+    # Slicing by bytes can split a multibyte character, so any incomplete character at the end is dropped
+    shortened = body.byteslice(0, available).to_s.scrub('')
+    # Cut at a line break so the truncation never splits a link or a snippet in half
+    shortened = shortened[0, shortened.rindex("\n") || shortened.length]
+
+    "#{shortened}#{notice}#{footer}"
+  end
+
   def create_configuration_details(app_options)
     yaml = YAML.dump(app_options).delete_prefix("---\n")
     fence = '`' * [3, yaml.scan(/`+/).map(&:length).max.to_i + 1].max
@@ -394,7 +422,7 @@ helpers do
     value = text.to_s
     fence = '`' * (value.scan(/`+/).map(&:length).max.to_i + 1)
 
-    "#{fence}#{value.start_with?('`') ? ' ' : ''}#{value}#{value.end_with?('`') ? ' ' : ''}#{fence}"
+    "#{fence}#{' ' if value.start_with?('`')}#{value}#{' ' if value.end_with?('`')}#{fence}"
   end
 
   def create_issue_title(file, change)
@@ -580,7 +608,7 @@ helpers do
       'issue_labels' => [],
       'check_drafts' => false,
       'multiline_comments' => false,
-      'action_items' => %w[todo fixme bug],
+      'action_items' => %w[TODO FIXME BUG],
       'case_sensitive' => false,
       'check_inline_comments' => false,
       'standalone_items' => false,
@@ -598,32 +626,45 @@ helpers do
       'issue_labels' => ->(value) { value.is_a?(Array) && (0..10).include?(value.size) && value.all? { |v| v.is_a?(String) && !v.strip.empty? } },
       'check_drafts' => ->(value) { [true, false].include?(value) },
       'multiline_comments' => ->(value) { [true, false].include?(value) },
-      'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) },
+      'action_items' => ->(value) { value.is_a?(Array) && (0..15).include?(value.size) && value.all?(String) },
       'case_sensitive' => ->(value) { [true, false].include?(value) },
       'check_inline_comments' => ->(value) { [true, false].include?(value) },
       'standalone_items' => ->(value) { [true, false].include?(value) },
       # A language may have multiple line characters, defined as an array of strings in second place, or just a string
+      # The line comment may be null for languages that only have block comments, and block comments need both delimiters
       'add_languages' => lambda do |value|
         value.is_a?(Array) &&
           (1..10).include?(value.size) &&
           value.all? do |v|
-            v.is_a?(Array) &&
-              (2..4).include?(v.size) &&
-              v[0].is_a?(String) &&
-              (v.size == 2 || v.size == 4 ? (v[1].is_a?(Array) && v[1].all? { |i| i.is_a?(String) }) || v[1].is_a?(String) : v[1].is_a?(String)) &&
-              (v[2..] || []).all? { |i| i.is_a?(String) || i.nil? }
+            next false unless v.is_a?(Array) && (2..4).include?(v.size) && v[0].is_a?(String)
+
+            line_valid = v[1].nil? || v[1].is_a?(String) || (v[1].is_a?(Array) && !v[1].empty? && v[1].all?(String))
+            # A language must define a line comment, a block comment, or both, and a block comment needs both delimiters
+            block_valid = case v.size
+                          when 2 then !v[1].nil?
+                          when 3 then v[2].is_a?(String) && !v[1].nil?
+                          else v[2].is_a?(String) && v[3].is_a?(String)
+                          end
+
+            line_valid && block_valid
           end
       end,
       # The regex checks if the given input is a valid .gitignore pattern
-      'ignore_files' => ->(value) { value.is_a?(Array) && (1..7).include?(value.size) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?\.\/-]+(/\*\*)?/?)\Z}.match?(v) } },
+      'ignore_files' => ->(value) { value.is_a?(Array) && (1..7).include?(value.size) && value.all? { |v| v.is_a?(String) && %r{\A(/?(\*\*/)?[\w*\[\]{}?./-]+(/\*\*)?/?)\Z}.match?(v) } },
       'additional_lines' => ->(value) { value.is_a?(Integer) && (0..10).include?(value) },
       'always_split_snippets' => ->(value) { [true, false].include?(value) }
     }
 
-    file = @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha) rescue nil
-    file ||= @installation_client.contents(full_repo_name, path: '.github/config.yaml', ref: head_sha)
+    file = begin
+      @installation_client.contents(full_repo_name, path: '.github/config.yml', ref: head_sha)
+    rescue Octokit::NotFound
+      @installation_client.contents(full_repo_name, path: '.github/config.yaml', ref: head_sha)
+    end
     decoded_file = Base64.decode64(file.content)
-    file_options = YAML.safe_load(decoded_file)['todo-pr-checker'] || {}
+    # The configuration file is shared with other apps, so anything outside of our own section must never break the check
+    parsed_file = YAML.safe_load(decoded_file, permitted_classes: [Date, Time], aliases: true)
+    file_options = parsed_file.is_a?(Hash) ? parsed_file['todo-pr-checker'] : nil
+    file_options = {} unless file_options.is_a?(Hash)
 
     # Merge the default options with those from the file
     default_options.keys.each_with_object({}) do |key, result|
@@ -635,18 +676,16 @@ helpers do
                     end
     end
   rescue Octokit::NotFound
-    logger.debug 'No .github/config.yml or .github/config.yaml found, or options validation failed. Using default options.'
+    debug_log 'No .github/config.yml or .github/config.yaml found. Using default options.'
+    default_options
+  rescue Psych::Exception, NoMethodError, TypeError, ArgumentError => e
+    debug_log "The configuration file could not be read (#{e.class}), using default options: #{e.message}"
     default_options
   end
 
   # (4) Retrieves all changes in a pull request from the GitHub API and formats them to be usable by the app
-  def get_pull_request_changes(full_repo_name, pull_number, ignore_files_regex)
-    ignore_files_regex.map! do |pattern|
-      pattern.gsub!('.', '\.')
-      pattern.gsub!('*', '.*')
-      pattern.gsub!('/', '\/')
-      Regexp.new(pattern)
-    end
+  def get_pull_request_changes(full_repo_name, pull_number, ignore_files)
+    ignore_files_regex = ignore_files.filter_map { |pattern| glob_to_regex(pattern) }
 
     changes = {}
     ignored_files = []
@@ -668,6 +707,7 @@ helpers do
 
         # Parse the patch to get added lines and their line numbers
         next unless file.patch
+
         changes[filename] = []
         line_number = 0
         file.patch.each_line do |line|
@@ -675,8 +715,9 @@ helpers do
             # Extract the new file's starting line number from the hunk header
             # Example: @@ -1,6 +1,7 @@
             m = line.match(/\+([0-9]+)/)
-            line_number = m ? m[1].to_i : line_number
-          elsif line.start_with?('+') && !line.start_with?('+++')
+            line_number = m[1].to_i if m
+          elsif line.start_with?('+')
+            # Only the leading marker is removed, so added lines that themselves start with a + are kept
             changes[filename] << { line: line_number, text: line[1..] }
             line_number += 1
           elsif !line.start_with?('-') && !line.chomp.eql?('\ No newline at end of file')
@@ -693,12 +734,42 @@ helpers do
     [changes, ignored_files, last_diff_lines]
   end
 
+  # Translates a gitignore style pattern into an anchored regular expression
+  # Everything that is not a glob operator is escaped, so a pattern can never be interpreted as a regular expression
+  def glob_to_regex(pattern)
+    value = pattern.to_s.dup
+    return nil if value.empty?
+
+    # A pattern without a slash matches the file name in any directory, one with a slash matches from the repository root
+    anchored_to_root = value.include?('/') && !value.end_with?('/')
+    value = value.delete_prefix('/')
+    # A directory pattern matches everything inside that directory
+    value += '**' if value.end_with?('/')
+
+    regex = value.gsub(%r{\*\*/|\*\*|\*|\?|[^*?]+}) do |token|
+      case token
+      when '**/' then '(?:.*/)?'
+      when '**' then '.*'
+      when '*' then '[^/]*'
+      when '?' then '[^/]'
+      else Regexp.escape(token)
+      end
+    end
+    regex = "(?:.*/)?#{regex}" unless anchored_to_root
+
+    Regexp.new("\\A#{regex}\\z")
+  rescue RegexpError => e
+    debug_log "Ignoring invalid ignore_files pattern #{pattern.inspect}: #{e.message}"
+    nil
+  end
+
   # Code snippets cannot be rendered by GitHub if they reference lines beyond the end of a file
   def snippet_end_line(start_line, additional_lines, last_diff_line)
     end_line = start_line + additional_lines
     return end_line if last_diff_line.nil?
 
-    [end_line, [last_diff_line, start_line].max].min
+    # The snippet must not end before the action item itself, and not past the last line the diff proves exists
+    end_line.clamp(start_line, [last_diff_line, start_line].max)
   end
 
   # (5) Checks changed lines in supported file types for action items in code comments ("Todos")
@@ -711,7 +782,6 @@ helpers do
 
     todo_changes = {}
     unsupported_files = []
-    in_multiline_comment = false
 
     comment_chars = get_comment_chars(options['add_languages'])
 
@@ -724,8 +794,7 @@ helpers do
 
     # Changes are grouped by file name
     changes.each do |file, file_changes|
-      file_type = File.extname(file).delete('.')
-      comment_char = comment_chars.find { |key, _| key == file_type }
+      comment_char = comment_chars[file_type_of(file)]
 
       # If there is no mapping for the file type, skip it
       unless comment_char
@@ -738,37 +807,36 @@ helpers do
       # Check each line in the file for action items
       file_changes.each do |line|
         text = line[:text].strip
-        block_start = comment_char[1][:block_start]
-        line_comment_starts = comment_char[1][:line].compact
+        block_start = comment_char[:block_start]
+        line_comment_starts = comment_char[:line].compact
         line_comment_start_index = if check_inline_comments
                                      line_comment_starts.filter_map { |char| text.index(char) }.min
-                                   else
-                                     0 if line_comment_starts.any? { |char| text.start_with?(char) }
+                                   elsif line_comment_starts.any? { |char| text.start_with?(char) }
+                                     0
                                    end
         block_start_index = if check_inline_comments
                               text.index(block_start) if block_start
-                            else
-                              0 if block_start && text.start_with?(block_start)
+                            elsif block_start && text.start_with?(block_start)
+                              0
                             end
         comment_start_index = [line_comment_start_index, block_start_index].compact.min
         comment_text = in_multiline_comment ? text : text[comment_start_index..] if in_multiline_comment || comment_start_index
 
-        # If the line is a comment and contains any action item, add it to the output collection
-        # The text following the match is kept so descriptions can be taken from the comment only, never from surrounding code
+        # The first match by position in the line is reported, not the first in configuration order
         if comment_text
           matched_item, matched_text = item_regexes.filter_map do |item, regex|
             match = comment_text.match(regex)
-            [item, match.post_match] if match
-          end.first
+            [match.begin(0), item, match.post_match] if match
+          end.min_by(&:first)&.drop(1)
         end
         file_todos << line.merge(item: matched_item, description: matched_text) if matched_item
 
         if !multiline_comments
           in_multiline_comment = false
         elsif in_multiline_comment
-          in_multiline_comment = false if comment_char[1][:block_end] && text.include?(comment_char[1][:block_end])
-        elsif block_start_index && (!line_comment_start_index || block_start_index <= line_comment_start_index)
-          block_end_index = text.index(comment_char[1][:block_end], block_start_index + block_start.length)
+          in_multiline_comment = false if comment_char[:block_end] && text.include?(comment_char[:block_end])
+        elsif block_start_index && comment_char[:block_end] && (!line_comment_start_index || block_start_index <= line_comment_start_index)
+          block_end_index = text.index(comment_char[:block_end], block_start_index + block_start.length)
           in_multiline_comment = block_end_index.nil?
         end
       end
@@ -778,6 +846,14 @@ helpers do
     end
 
     [todo_changes, unsupported_files]
+  end
+
+  # Resolves the key used to look up comment characters, so that uppercase extensions and extensionless dotfiles work
+  def file_type_of(file)
+    base_name = File.basename(file.to_s)
+    extension = File.extname(base_name).delete('.')
+
+    (extension.empty? ? base_name.delete_prefix('.') : extension).downcase
   end
 
   # (6) Retrieves the file types and comment characters for the app's supported languages, and user defined values
@@ -790,7 +866,7 @@ helpers do
       %w[css] => { line: ['/*'], block_start: '/*', block_end: '*/' },
       %w[r gitignore sh bash yml yaml] => { line: ['#'], block_start: nil, block_end: nil },
       %w[rb] => { line: ['#'], block_start: '=begin', block_end: '=end' },
-      %w[pl] => { line: ['#'], block_start: '=', block_end: '=cut' },
+      %w[pl] => { line: ['#'], block_start: nil, block_end: nil },
       %w[py] => { line: ['#'], block_start: "'''", block_end: "'''" },
       %w[ps1] => { line: ['#'], block_start: '<#', block_end: '#>' },
       %w[sql] => { line: ['--'], block_start: '/*', block_end: '*/' },
@@ -808,8 +884,9 @@ helpers do
     end
 
     added_languages.each do |lang|
-      file_type = lang[0].sub(/^\./, '')
-      line_chars = lang[1].is_a?(Array) ? lang[1] : [lang[1]]
+      file_type = lang[0].sub(/^\./, '').downcase
+      # A null line comment means the language only has block comments
+      line_chars = lang[1].is_a?(Array) ? lang[1] : [lang[1]].compact
       # The length of lang defines which permutation is given by the user
       # Users may overwrite the default comment characters for a file type
       case lang.length
@@ -849,7 +926,7 @@ helpers do
     comment_body = ''
     todo_changes.each do |file, changes|
       file_link = blob_link(full_repo_name, head_sha, file)
-      num_items = if changes.count == 1
+      num_items = if changes.one?
                     '1 action item'
                   else
                     "#{changes.count} action items"
@@ -914,16 +991,27 @@ helpers do
       from_fork: pull_request.head&.repo&.full_name.to_s != full_repo_name
     }
   rescue StandardError => e
-    logger.debug "Could not fetch the Pull Request: #{e}"
+    debug_log "Could not fetch the Pull Request: #{e}"
     # Without the Pull Request the origin of the configuration cannot be established, so no issues are created
     { from_fork: true }
   end
 
   # (8) If the app has already created a comment on the Pull Request, return a reference to it, otherwise return nil
+  # Pull Requests can have more comments than fit on one page, and the app's comment may be on any of them
   def fetch_app_comment(full_repo_name, pull_number)
-    comments = @installation_client.issue_comments(full_repo_name, pull_number, accept: 'application/vnd.github+json')
+    page = 1
+    loop do
+      comments = @installation_client.issue_comments(full_repo_name, pull_number, per_page: 100, page: page, accept: 'application/vnd.github+json')
+      break if comments.empty?
 
-    comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
+      app_comment = comments.find { |comment| comment.performed_via_github_app&.id == APP_IDENTIFIER.to_i }
+      return app_comment if app_comment
+      break if comments.length < 100 || page >= MAX_COMMENT_LOOKUP_PAGES
+
+      page += 1
+    end
+
+    nil
   end
 
   ##############################################################################################################
@@ -950,7 +1038,7 @@ helpers do
       iss: APP_IDENTIFIER
     }
     jwt = JWT.encode(payload, GITHUB_PRIVATE_KEY, 'RS256')
-    @authenticate_app ||= Octokit::Client.new(bearer_token: jwt)
+    @authenticate_app = Octokit::Client.new(bearer_token: jwt)
   end
 
   # Boilerplate code to authenticate the app's installation in a repository
@@ -962,9 +1050,11 @@ helpers do
 
   # Boilerplate code to verify the signature of the webhook received from GitHub
   def verify_webhook_signature
-    their_signature_header = request.env['HTTP_X_HUB_SIGNATURE_256'] || 'sha256='
-    method, their_digest = their_signature_header.split('=')
-    our_digest = OpenSSL::HMAC.hexdigest(method, GITHUB_WEBHOOK_SECRET, @payload_raw)
+    # The digest is fixed to the one GitHub uses, so that the request cannot ask for a weaker one
+    their_digest = request.env['HTTP_X_HUB_SIGNATURE_256'].to_s.delete_prefix('sha256=')
+    halt 401 if their_digest.empty?
+
+    our_digest = OpenSSL::HMAC.hexdigest('sha256', GITHUB_WEBHOOK_SECRET, @payload_raw)
     halt 401 unless Rack::Utils.secure_compare(their_digest, our_digest)
 
     logger.debug "---- received event #{request.env['HTTP_X_GITHUB_EVENT']}"
