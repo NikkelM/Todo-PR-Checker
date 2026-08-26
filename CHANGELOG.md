@@ -1,8 +1,13 @@
 # Changelog
 
+## v2.0.1
+<!--Releasenotes start-->
+- Internal changes to logging behaviour.
+- Please review updates to the Privacy Policy.
+<!--Releasenotes end-->
+
 ## v2.0.0
 
-<!--Releasenotes start-->
 **This release requires the `Issues: Read and write` permission, which you will be asked to approve.** The permission is only used if you enable the new `create_issues` option, which is disabled by default - the app keeps working as before until you do.
 
 - Added reporting for changed text files that were not checked because their file type is unsupported.
@@ -29,7 +34,6 @@
 - Fixed code snippets not rendering for action items close to the end of a file, by shortening the snippet to the last line that exists.
 - Fixed Pull Requests with many action items failing to report at all, by shortening the comment and check run summary to the length GitHub accepts.
 - Fixed Perl assignments being treated as the start of a block comment when `multiline_comments` was enabled.
-<!--Releasenotes end-->
 
 ## v1.5.0
 

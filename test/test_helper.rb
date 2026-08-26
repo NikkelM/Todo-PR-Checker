@@ -10,7 +10,11 @@ ENV['GITHUB_WEBHOOK_SECRET'] = 'test-webhook-secret'
 require 'json'
 require 'minitest/autorun'
 require 'rack/test'
+require 'stringio'
 require_relative '../app'
+
+# Keeps the structured webhook log out of the test output; the logging tests swap in their own stream
+Sinatra::Application.set :webhook_log_stream, StringIO.new
 
 Sinatra::Application.set :test_calls, []
 Sinatra::Application.set :test_config_content, "todo-pr-checker: {}\n"

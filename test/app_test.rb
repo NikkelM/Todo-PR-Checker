@@ -432,3 +432,76 @@ class SkippedFilesReportingTest < Minitest::Test
     assert_includes comment[:args][2], '...and 1 more.'
   end
 end
+
+class WebhookDecisionLoggingTest < WebhookTest
+  def setup
+    super
+    @original_stream = app.settings.webhook_log_stream
+    @log_stream = StringIO.new
+    app.settings.webhook_log_stream = @log_stream
+  end
+
+  def teardown
+    app.settings.webhook_log_stream = @original_stream
+  end
+
+  def test_logs_a_single_structured_line_for_a_processed_pull_request
+    post_webhook('pull_request', pull_request_payload('opened'))
+
+    assert_equal 200, last_response.status
+    assert_equal 1, logged_lines.size
+
+    entry = logged_lines.first
+
+    assert_equal 'INFO', entry['severity']
+    assert_equal 'webhook_received', entry['message']
+    assert_equal 'pull_request', entry['event']
+    assert_equal 'opened', entry['action']
+    assert_equal 'pull_request', entry['decision']
+  end
+
+  # The ignored deliveries are the ones we pay for without doing any work, so they are the ones we most need attributed
+  def test_logs_ignored_deliveries_with_the_originating_app
+    post_webhook('check_run', check_run_payload('completed', app_id: 999_999))
+
+    assert_equal 204, last_response.status
+
+    entry = logged_lines.first
+
+    assert_equal 'check_run', entry['event']
+    assert_equal 'completed', entry['action']
+    assert_equal 999_999, entry['app_id']
+    assert_equal 'ignore', entry['decision']
+  end
+
+  def test_logs_ignored_deliveries_for_unhandled_event_types
+    post_webhook('issue_comment', base_payload.merge('action' => 'created'))
+
+    assert_equal 204, last_response.status
+    assert_equal 'ignore', logged_lines.first['decision']
+    assert_equal 'issue_comment', logged_lines.first['event']
+  end
+
+  def test_emits_one_line_per_delivery_so_counts_are_meaningful
+    3.times { post_webhook('check_suite', check_suite_payload('completed', app_id: 999_999)) }
+
+    assert_equal 3, logged_lines.size
+    assert(logged_lines.all? { |entry| entry['decision'] == 'ignore' })
+  end
+
+  def test_logging_failures_never_break_a_delivery
+    failing = Object.new
+    failing.define_singleton_method(:write) { |*| raise IOError, 'stream closed' }
+    app.settings.webhook_log_stream = failing
+
+    post_webhook('pull_request', pull_request_payload('opened'))
+
+    assert_equal 200, last_response.status
+  end
+
+  private
+
+  def logged_lines
+    @log_stream.string.each_line.reject { |line| line.strip.empty? }.map { |line| JSON.parse(line) }
+  end
+end
