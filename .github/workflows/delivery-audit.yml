@@ -1,0 +1,23 @@
+name: Delivery audit
+
+on:
+  schedule:
+    - cron: '45 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Webhook delivery audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Audit webhook delivery volume
+        env:
+          TPC_PRIVATE_KEY: ${{ secrets.TPC_PRIVATE_KEY }}
+        run: ruby .github/scripts/delivery_audit.rb 20

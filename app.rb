@@ -18,6 +18,8 @@ puts "Running Todo PR Checker version: #{VERSION}"
 
 set :bind, '0.0.0.0'
 set :port, ENV['PORT'] || '3000'
+# Structured webhook logs go here so tests can capture them without touching stdout
+set :webhook_log_stream, $stdout
 
 GITHUB_PRIVATE_KEY = OpenSSL::PKey::RSA.new(ENV.fetch('GITHUB_PRIVATE_KEY', nil).gsub('\n', "\n"))
 GITHUB_WEBHOOK_SECRET = ENV.fetch('GITHUB_WEBHOOK_SECRET', nil)
@@ -58,7 +60,11 @@ post '/' do
   event_context = get_webhook_event_context(event_type, @payload)
   originating_app_id = @payload.dig(event_type, 'app', 'id') if event_type
 
-  logger.debug "Webhook event=#{event_type} action=#{@payload['action']} repository_id=#{@payload.dig('repository', 'id')} installation_id=#{@payload.dig('installation', 'id')} app_id=#{originating_app_id} decision=#{event_context ? event_context[:type] : 'ignore'}"
+  log_structured('INFO', 'webhook_received',
+                 event: event_type,
+                 action: @payload['action'],
+                 app_id: originating_app_id,
+                 decision: event_context ? event_context[:type] : 'ignore')
   return 204 unless event_context
 
   authenticate_app
@@ -174,6 +180,13 @@ helpers do
   # Logging must never be the reason a check fails, and the logger is only available while serving a request
   def debug_log(message)
     logger.debug(message)
+  rescue StandardError
+    nil
+  end
+
+  def log_structured(severity, message, **fields)
+    line = { severity: severity, message: message }.merge(fields.compact).to_json
+    settings.webhook_log_stream.write("#{line}\n")
   rescue StandardError
     nil
   end

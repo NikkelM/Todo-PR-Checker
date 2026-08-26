@@ -18,16 +18,29 @@ Depending on the configuration you provide in your repository, the app writes co
 This is limited to check runs and their annotations, comments on Pull Requests, and, if you enable the `create_issues` option, issues describing the action items that were found.
 Content is only ever written to the repository the webhook originated from, and only contains information derived from that repository and the Pull Request being checked.
 
-The app does not persist any data beyond the duration of a request (where a "request" hereby is the reception, processing of, and response to, a webhook as described above), and does not store any data in any form.
+The app does not persist the content of any webhook beyond the duration of a request (where a "request" hereby is the reception, processing of, and response to, a webhook as described above).
+File changes, Pull Request content, and any other payload content are held in memory for the duration of the request only, and are never written to storage.
+
+To operate the app reliably, and to detect abnormal traffic volumes that would otherwise degrade or interrupt the service, the app records a minimal technical log entry for each webhook it receives.
+This entry contains only the type of the event, the action it describes, the identifier of the GitHub App that created the check run an event relates to, and whether the app acted on the event or ignored it.
+It does not contain repository names or identifiers, installation or account identifiers, or content from the webhook payload.
 
 # Do third parties see and/or have access to information obtained by the app?
 The app leverages Google Cloud services to build, deploy and host the app and deliver its functionality.
 This means that any webhooks as described above are transmitted to and processed by Google Cloud services.
+The technical log entries described above, and the standard request logs that Google Cloud produces as part of hosting the app, are stored by Google Cloud for the retention period set out below.
 Beyond the scope of delivering the app's functionality, the data is not used in any other way by Google Cloud services, and not shared with any other third parties.
 
 # Data Retention Policy
-No data is retained in any form.
-Data is only used during the duration of a request, and not stored in any way.
+No webhook payload content is retained in any form.
+Payload content is used only during the duration of a request, and is not stored in any way.
+
+The technical log entries described above, together with the standard request logs produced by Google Cloud as part of hosting the app (comprising the time of the request, the response status, the duration of the request, and the network address and user agent of the sending GitHub service), are retained for a limited period and are then deleted automatically.
+The current retention period is 30 days.
+
+Separately, GitHub itself retains a record of the webhooks it has delivered to the app, which is accessible to the developer through GitHub's own interfaces.
+Where abnormal traffic has to be investigated, the developer may inspect that record through GitHub.
+Data viewed in this way is not incorporated into the app or into any persistent store, and any temporary copy made in the course of an investigation is deleted once that investigation concludes.
 
 # Security
 We are concerned about safeguarding the confidentiality of your information. 
